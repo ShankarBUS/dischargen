@@ -1,4 +1,4 @@
-# Dischargen: The Discharge Template Generator
+# DischarGen: The Discharge Template Generator
 
 This project provides a platform for medical professionals or health care workers to create and maintain electrical medical records in a more flexible manner.
 
