@@ -1,4 +1,4 @@
-import { parseMCTM } from './js/mctm/mctm_parser.js';
+import { parseMCTMResolved } from './js/mctm/mctm_parser.js';
 import { lintMCTM } from './js/mctm/mctm_linter.js';
 import { validateAll } from './js/validation.js';
 import { renderAST, reevaluateConditions, evaluateComputedAll, getFieldValueFromRef } from './js/renderer.js';
@@ -60,11 +60,11 @@ templateFileInput.addEventListener('change', async e => {
   loadTemplate(txt);
 });
 
-function loadTemplate(text) {
+async function loadTemplate(text) {
   formContainer.innerHTML = '';
   state.fieldRefs = {};
   state.computed = [];
-  const parsed = parseMCTM(text);
+  const parsed = await parseMCTMResolved(text, { onError: (msg) => console.warn('[include]', msg) });
   state.meta = parsed.meta || {};
   state.ast = parsed.ast || [];
   // Lint
@@ -77,7 +77,7 @@ function loadTemplate(text) {
       console.groupEnd();
     }
   } catch (e) { console.error('Lint failed', e); }
-  renderAST(formContainer, state);
+  await renderAST(formContainer, state);
   try { updateLangBadge(state.meta); } catch {}
   restoreAutosave();
   reevaluateConditions(formContainer, state);

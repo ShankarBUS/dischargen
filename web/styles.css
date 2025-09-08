@@ -449,6 +449,23 @@ textarea[aria-invalid=true] {
     flex-direction: column;
 }
 
+/* Groups */
+.group {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    margin-bottom: 1rem;
+    border-radius: var(--radius-md);
+    padding: .5rem .75rem;
+}
+.group > h2 { margin: 0 0 .5rem; font-size: .95rem; }
+.group .group-body { display: grid; gap: .5rem; }
+.group .group-body.layout-vstack { grid-template-columns: 1fr; }
+.group .group-body.layout-hstack { grid-auto-flow: column; grid-auto-columns: 1fr; }
+.group .group-body.layout-columns { grid-template-columns: repeat(2, 1fr); }
+.group .group-body.layout-columns.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.group .group-body.layout-columns.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.group .group-body.layout-columns.cols-5 { grid-template-columns: repeat(5, 1fr); }
+
 /* Buttons */
 button,
 .btn {

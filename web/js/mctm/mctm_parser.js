@@ -2,14 +2,26 @@ export function parseMCTM(source) {
   const lines = source.split(/\r?\n/);
   const ast = [];
   const meta = {};
-  let i = 0; let currentSection = null; let metaParsed = false;
-  const versionDirective = /^@(mctm)\s+(\d+(?:\.\d+)*)/i;
+  let i = 0; let metaParsed = false;
+  let currentSection = null;
+  // A stack of containers to support nested groups. Each item is { container: Array }
+  const containerStack = [];
+
+  const versionDirective = /^@(mctm)\s+(\d+(?:\.(?:\d+)*)*)/i;
   if (lines[0] && versionDirective.test(lines[0])) {
     const m = lines[0].match(versionDirective);
     const ver = m[2];
     meta.mctmversion = ver;
     i = 1; // Skip version line
   }
+
+  // The active container to push parsed nodes into (root or a section/group children)
+  const getActiveContainer = () => {
+    if (containerStack.length) return containerStack[containerStack.length - 1].container;
+    if (currentSection) return currentSection.children;
+    return ast;
+  };
+
   while (i < lines.length) {
     let line = lines[i] ?? '';
     // Comments (start with //)
@@ -27,12 +39,48 @@ export function parseMCTM(source) {
       metaParsed = true; continue;
     }
 
-    // Sections (start with #)
+    // Sections (new syntax: > "Title" id:... if:...)
+    const secMatch = /^>\s+(.+)$/.exec(line);
+    if (secMatch && containerStack.length === 0) { // sections only at root level
+      const startLine = i + 1;
+      const { title, props } = parseTitleAndProps(secMatch[1]);
+      const section = { type: 'section', title, children: [], line: startLine, ...props };
+      if (!section.id && section.title) section.id = slugify(section.title);
+      ast.push(section);
+      currentSection = section;
+      i++; continue;
+    }
+
+    // Legacy sections (start with #)
     const headingMatch = /^#\s+(.+)$/.exec(line);
-    if (headingMatch) {
+    if (headingMatch && containerStack.length === 0) {
       currentSection = { type: 'section', title: headingMatch[1].trim(), children: [], line: i + 1 };
+      if (!currentSection.id) currentSection.id = slugify(currentSection.title);
       ast.push(currentSection); i++; continue;
     }
+
+    // Group start: { "Group Title" id:... layout:... if:...  (ends with a line containing only })
+    const grpOpen = /^\s*\{\s*(.*)$/.exec(line);
+    if (grpOpen) {
+      const startLine = i + 1;
+      const header = grpOpen[1] || '';
+      const { title, props } = parseTitleAndProps(header);
+      const group = { type: 'group', title, children: [], line: startLine, ...props };
+      if (!group.id && group.title) group.id = slugify(group.title);
+      getActiveContainer().push(group);
+      // Push this group's children container on the stack
+      containerStack.push({ container: group.children });
+      i++;
+      // Consume subsequent empty header continuation lines if any (no special handling)
+      continue;
+    }
+
+    // Group end
+    if (/^\s*\}\s*$/.test(line)) {
+      if (containerStack.length) containerStack.pop();
+      i++; continue;
+    }
+
     // Field blocks start and end with '@'
     const atFence = /^@([a-z][a-z0-9-]*)(.*)$/i.exec(line.trim());
     if (atFence) {
@@ -56,10 +104,14 @@ export function parseMCTM(source) {
         const extra = parseProps(bodyLines.join(' '));
         Object.assign(props, extra);
       }
-      const node = { type: 'field', fieldType: type, line: startLine, ...props };
-      if (!currentSection) { ast.push(node); } else { currentSection.children.push(node); }
+      const node = type === 'include'
+        ? { type: 'include', line: startLine, ...props }
+        : { type: 'field', fieldType: type, line: startLine, ...props };
+      const container = getActiveContainer();
+      container.push(node);
       continue;
     }
+
     // Static paragraph capture
     if (line.trim()) {
       const paraLines = [line];
@@ -69,11 +121,13 @@ export function parseMCTM(source) {
         i < lines.length &&
         lines[i].trim() &&
         !/^#\s+/.test(lines[i]) &&
+        !/^>\s+/.test(lines[i]) &&
         !/^@([a-z][a-z0-9-]*)/i.test(lines[i].trim()) &&
-        !/^\s*(\/\/|%%)/.test(lines[i])
+        !/^\s*(\/\/|%%)/.test(lines[i]) &&
+        !/^\s*\}/.test(lines[i])
       ) { paraLines.push(lines[i]); i++; }
       const node = { type: 'field', fieldType: 'static', content: paraLines.join('\n'), line: startLine };
-      if (!currentSection) { ast.push(node); } else { currentSection.children.push(node); }
+      getActiveContainer().push(node);
       continue;
     }
     i++;
@@ -127,4 +181,167 @@ function stripQuotes(v) {
     return v.slice(1, -1);
   }
   return v;
+}
+
+// Utilities for new syntax
+function slugify(s) {
+  return String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9._-]/gi, '_')
+    .replace(/_+/g, '_');
+}
+
+function parseTitleAndProps(rest) {
+  let title = '';
+  let propsStr = '';
+  const trimmed = rest.trim();
+  if (!trimmed) return { title: '', props: {} };
+  if (trimmed[0] === '"' || trimmed[0] === "'") {
+    // parse quoted title
+    const quote = trimmed[0];
+    let j = 1; let prev = '';
+    while (j < trimmed.length) {
+      const c = trimmed[j];
+      if (c === quote && prev !== '\\') { j++; break; }
+      prev = c; j++;
+    }
+    title = stripQuotes(trimmed.slice(0, j));
+    propsStr = trimmed.slice(j).trim();
+  } else {
+    // find first key:value token occurrence to split title from props
+    const m = /\s+([A-Za-z_][\w.-]*\s*:)/.exec(trimmed);
+    if (m) {
+      const idx = m.index;
+      title = trimmed.slice(0, idx).trim();
+      propsStr = trimmed.slice(idx).trim();
+    } else {
+      title = trimmed;
+      propsStr = '';
+    }
+  }
+  const props = parseProps(propsStr);
+  if (!props.id && title) props.id = slugify(title);
+  return { title, props };
+}
+
+// ---- Include Expansion (Parse-Time) ----
+// Expands @include nodes by fetching and parsing referenced templates before rendering.
+// Options:
+//   baseURL: string used to resolve relative include template paths
+//   fetchImpl: custom fetch function (defaults to global fetch)
+//   onError: (msg, node) => void for diagnostics
+//   maxIncludeDepth: integer limit to prevent infinite recursion
+// Returns Promise<{ meta, ast }>
+export async function parseMCTMResolved(source, options = {}) {
+  const { baseURL = (typeof document !== 'undefined' ? document.baseURI : ''), fetchImpl = (typeof fetch !== 'undefined' ? fetch : null), onError, maxIncludeDepth = 64 } = options;
+  const parsed = parseMCTM(source);
+  if (!fetchImpl) return parsed;
+  const cache = new Map(); // templateUrl -> { meta, ast }
+  const activeStack = []; // array of { key, template, part }
+  const activeSet = new Set(); // membership for cycle detection
+
+  async function loadTemplate(url) {
+    if (cache.has(url)) return cache.get(url);
+    try {
+      const res = await fetchImpl(resolveUrl(url));
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const txt = await res.text();
+      const sub = parseMCTM(txt);
+      cache.set(url, sub);
+      return sub;
+    } catch (e) {
+      if (onError) onError(`Failed to load include template '${url}': ${e.message}`);
+      return { meta: {}, ast: [] };
+    }
+  }
+
+  function resolveUrl(tpl) {
+    try { return new URL(tpl, baseURL).href; } catch { return tpl; }
+  }
+
+  async function expandIncludesInArray(arr, parentIsRoot) {
+    for (let idx = 0; idx < arr.length; idx++) {
+      const node = arr[idx];
+      if (!node) continue;
+      if (node.type === 'include') {
+        const templateRef = node.template;
+        const partId = node.part || node.id;
+
+        if (!templateRef || !partId) {
+          if (onError) onError(`Include missing template or id/part`, node);
+          arr.splice(idx, 1); idx--; continue;
+        }
+
+        const cycleKey = templateRef + '::' + partId;
+
+        if (activeSet.has(cycleKey)) {
+          const firstIdx = activeStack.findIndex(e => e.key === cycleKey);
+          const path = activeStack.slice(firstIdx).map(e => `${e.template}::${e.part}`);
+          path.push(cycleKey);
+          if (onError) onError(`Include cycle detected: ${path.join(' -> ')}`, node);
+          arr.splice(idx, 1); idx--; continue;
+        }
+        if (activeStack.length >= maxIncludeDepth) {
+          if (onError) onError(`Include depth limit (${maxIncludeDepth}) exceeded at ${cycleKey}`, node);
+          arr.splice(idx, 1); idx--; continue;
+        }
+        activeStack.push({ key: cycleKey, template: templateRef, part: partId });
+        activeSet.add(cycleKey);
+        const tplParsed = await loadTemplate(templateRef);
+        const popped = activeStack.pop();
+        if (popped) activeSet.delete(popped.key);
+
+        const part = findPartById(tplParsed.ast, partId);
+        if (!part) {
+          if (onError) onError(`Include part '${partId}' not found in '${templateRef}'`, node);
+          arr.splice(idx, 1); idx--; continue;
+        }
+
+        const cloned = cloneNode(part);
+        // If including a section inside non-root context: inline its children instead of nested section
+        let replacement = [];
+        if (cloned.type === 'section' && !parentIsRoot) {
+          replacement = (cloned.children || []).map(ch => cloneNode(ch));
+        } else if (cloned.type === 'section' || cloned.type === 'group' || cloned.type === 'field') {
+          replacement = [cloned];
+        } else {
+          replacement = []; // unknown type
+        }
+        // Recursively expand includes inside the replacement nodes
+        for (const repNode of replacement) {
+          if (repNode.type === 'group' || repNode.type === 'section') {
+            await expandIncludesInArray([repNode], false); // treat repNode as root to expand nested includes
+          }
+        }
+        // Replace include with replacement nodes
+        arr.splice(idx, 1, ...replacement);
+        idx += replacement.length - 1;
+        continue;
+      }
+
+      // Recurse into children
+      if (node.children && (node.type === 'section' || node.type === 'group')) {
+        await expandIncludesInArray(node.children, false);
+      }
+    }
+  }
+
+  await expandIncludesInArray(parsed.ast, true);
+  return parsed;
+}
+
+function cloneNode(node) {
+  return JSON.parse(JSON.stringify(node));
+}
+
+function findPartById(ast, id) {
+  const stack = [...(ast || [])];
+  while (stack.length) {
+    const n = stack.shift();
+    if (!n) continue;
+    if ((n.type === 'section' || n.type === 'group' || n.type === 'field') && n.id === id) return n;
+    if (n.children && n.children.length) stack.push(...n.children);
+  }
+  return null;
 }

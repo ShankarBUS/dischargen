@@ -92,11 +92,14 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
     });
   };
 
-  // Sections
-  const renderSection = (titleText, children) => {
+  const renderSection = async (titleText, children, sectionNode) => {
+    if (sectionNode && sectionNode.if && !safeEvalCondition(sectionNode.if, getValue)) return;
     if (titleText) content.push({ text: toRunsWithFonts(titleText), style: 'sectionTitle', margin: [0, 8, 0, 6] });
     for (const node of children) {
+      if (!node) continue;
+      if (node.type === 'group') { await renderGroup(node); continue; }
       if (!node || node.type !== 'field') continue;
+      if (node.nooutput) continue; // honour opt-out from final output
       if (node.if && !safeEvalCondition(node.if, getValue)) continue;
 
       if (node.fieldType === 'static') {
@@ -133,8 +136,9 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
 
   for (const node of ast) {
     if (!node) continue;
-    if (node.type === 'section') renderSection(node.title, node.children || []);
-    else if (node.type === 'field') renderSection(null, [node]);
+  if (node.type === 'section') await renderSection(node.title, node.children || [], node);
+    else if (node.type === 'group') await renderGroup(node);
+    else if (node.type === 'field') await renderSection(null, [node]);
   }
 
   const dateStr = new Date().toLocaleString();
@@ -161,10 +165,61 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
   };
 
   return docDefinition;
+
+  async function renderGroup(node) {
+    if (!node) return;
+    if (node.if && !safeEvalCondition(node.if, getValue)) return;
+    const layout = String(node.layout || 'vstack');
+    const blocks = [];
+    const children = node.children || [];
+    const pushChild = async (child) => {
+      if (!child) return;
+      if (child.type === 'group') { await renderGroup(child); return; }
+      if (child.type !== 'field') return;
+      if (child.nooutput) return;
+      if (child.if && !safeEvalCondition(child.if, getValue)) return;
+      if (child.fieldType === 'static') {
+        const md = String(child.content || '').trim(); if (!md) return; const m = markdownToPdfMakeBlocks(md); blocks.push(...m); return;
+      }
+      if (child.fieldType === 'table') {
+        const tableVal = (getValue(child.id) || []);
+        const { headers, rows } = buildTableRows(child, tableVal);
+        if (!headers.length) return;
+        const bodyRows = rows.map(r => r.map(c => ({ text: toRunsWithFonts(c) })));
+        if (child.label) blocks.push({ text: toRunsWithFonts(child.label), style: 'sectionLabel', margin: [0, 6, 0, 4] });
+        blocks.push({ table: { headerRows: 1, widths: headers.map(() => '*'), body: [headers, ...bodyRows] }, layout: 'lightHorizontalLines', fontSize: 10, margin: [0, 0, 0, 8] });
+        return;
+      }
+      const line = buildFieldLine(child, getValue(child.id)); if (line) blocks.push({ text: toRunsWithFonts(line), margin: [0, 0, 0, 4] });
+    };
+    for (const ch of children) { await pushChild(ch); }
+
+    if (/^hstack$/i.test(layout)) {
+      const cols = blocks.map(b => ({ stack: [b], width: '*' }));
+      if (node.title) content.push({ text: toRunsWithFonts(node.title), style: 'sectionLabel', margin: [0, 6, 0, 4] });
+      content.push({ columns: cols, columnGap: 10, margin: [0, 0, 0, 6] });
+    } else if (/^vstack$/i.test(layout)) {
+      if (node.title) content.push({ text: toRunsWithFonts(node.title), style: 'sectionLabel', margin: [0, 6, 0, 4] });
+      blocks.forEach(b => content.push(b));
+    } else {
+      const m = /^columns-(\d+)$/i.exec(layout);
+      if (m) {
+        const count = Math.max(1, parseInt(m[1], 10) || 1);
+        const cols = Array.from({ length: count }, () => []);
+        blocks.forEach((b, idx) => cols[idx % count].push(b));
+        const colDefs = cols.map(stack => ({ stack, width: '*' }));
+        if (node.title) content.push({ text: toRunsWithFonts(node.title), style: 'sectionLabel', margin: [0, 6, 0, 4] });
+        content.push({ columns: colDefs, columnGap: 10, margin: [0, 0, 0, 6] });
+      } else {
+        if (node.title) content.push({ text: toRunsWithFonts(node.title), style: 'sectionLabel', margin: [0, 6, 0, 4] });
+        blocks.forEach(b => content.push(b));
+      }
+    }
+  }
 }
 
 function buildTableRows(node, tableVal) {
-  const headers = (node.columns ? String(node.columns).split(',').map(s => s.trim()).filter(Boolean) : []);
+  const headers = node.columns;
   const rows = Array.isArray(tableVal) ? tableVal : [];
   const body = rows.map(r => headers.map(h => str(r[h]))).filter(r => r.some(c => c && c.trim() !== ''));
   return { headers, rows: body };

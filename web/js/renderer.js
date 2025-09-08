@@ -4,22 +4,59 @@ import { evaluateCondition } from './conditional.js';
 import { applyValidation } from './validation.js';
 
 export function renderAST(root, state) {
-    state.ast.forEach(node => {
-        if (node.type === 'section') {
-            const sectionEl = document.createElement('div');
-            sectionEl.className = 'section';
-            const h = document.createElement('h1');
-            h.textContent = node.title;
-            h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
-            sectionEl.appendChild(h);
-            const body = document.createElement('div');
-            node.children.forEach(child => { const fieldEl = renderField(child, state); if (fieldEl) body.appendChild(fieldEl); });
-            sectionEl.appendChild(body);
-            root.appendChild(sectionEl);
-        } else if (node.type === 'field') {
-            const fieldEl = renderField(node, state); if (fieldEl) root.appendChild(fieldEl);
+    const renderNodes = (nodes, parent) => {
+        for (const node of nodes) {
+            if (!node || node.type === 'include') continue; // includes already expanded parse-time
+            if (node.type === 'section') {
+                const sectionEl = document.createElement('div');
+                sectionEl.className = 'section';
+                if (node.if) sectionEl.dataset.condition = node.if;
+                const h = document.createElement('h1');
+                h.textContent = node.title;
+                h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
+                sectionEl.appendChild(h);
+                const body = document.createElement('div');
+                renderNodes(node.children || [], body);
+                sectionEl.appendChild(body);
+                parent.appendChild(sectionEl);
+            } else if (node.type === 'group') {
+                const groupEl = renderGroup(node, state);
+                if (groupEl) parent.appendChild(groupEl);
+            } else if (node.type === 'field') {
+                const fieldEl = renderField(node, state); if (fieldEl) parent.appendChild(fieldEl);
+            }
         }
+    };
+    renderNodes(state.ast || [], root);
+}
+
+function renderGroup(node, state) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'group';
+    wrapper.dataset.groupId = node.id || '';
+    if (node.if) wrapper.dataset.condition = node.if;
+    if (node.title) {
+        const h = document.createElement('h2');
+        h.textContent = node.title;
+        wrapper.appendChild(h);
+    }
+    const layout = String(node.layout || 'vstack');
+    const body = document.createElement('div');
+    body.className = 'group-body';
+    if (/^hstack$/i.test(layout)) body.classList.add('layout-hstack');
+    else if (/^vstack$/i.test(layout)) body.classList.add('layout-vstack');
+    else {
+        const m = /^columns-(\d+)$/i.exec(layout);
+        if (m) body.classList.add('layout-columns', `cols-${m[1]}`);
+        else body.classList.add('layout-vstack');
+    }
+    (node.children || []).forEach(ch => {
+        if (!ch || ch.type === 'include') return;
+        if (ch.type === 'group') { const el = renderGroup(ch, state); if (el) body.appendChild(el); }
+        else if (ch.type === 'field') { const el = renderField(ch, state); if (el) body.appendChild(el); }
     });
+    wrapper.appendChild(body);
+    return wrapper;
 }
 
 function renderField(node, state) {
@@ -393,7 +430,7 @@ function renderTableField(node, wrapper, state) {
     const tableWrapper = document.createElement('div');
     tableWrapper.className = 'table-wrapper';
     const table = document.createElement('table');
-    const cols = (node.columns || '').split(',').map(c => c.trim()).filter(Boolean);
+    const cols = node.columns;
     const thead = document.createElement('thead');
     thead.innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
     const tbody = document.createElement('tbody');
@@ -547,9 +584,73 @@ export function evaluateComputedAll(state) {
 }
 
 export function renderMarkdownBasic(md) {
-    return (md || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/\n/g, '<br/>');
+    if (!md) return '';
+    const text = String(md).replace(/\r\n?/g, '\n');
+    const lines = text.split('\n');
+
+    const out = [];
+    let para = [];
+    let inUL = false;
+    let inOL = false;
+
+    const escapeHtml = (s) => s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;');
+
+    const applyInline = (s) => {
+        // Escape first, then transform inline markdown
+        let t = escapeHtml(s);
+        t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        return t;
+    };
+
+    const flushPara = () => {
+        if (para.length) {
+            out.push('<p>' + para.join('<br/>') + '</p>');
+            para = [];
+        }
+    };
+
+    const closeLists = () => {
+        if (inUL) { out.push('</ul>'); inUL = false; }
+        if (inOL) { out.push('</ol>'); inOL = false; }
+    };
+
+    for (const raw of lines) {
+        const line = raw.replace(/\s+$/,'');
+        const trimmed = line.trim();
+
+        // Blank line => paragraph/list boundary
+        if (!trimmed) {
+            flushPara();
+            closeLists();
+            continue;
+        }
+
+        // Unordered list item "- " or "* "
+        let m = /^\s*[-*]\s+(.+)$/.exec(line);
+        if (m) {
+            flushPara();
+            if (!inUL) { closeLists(); out.push('<ul>'); inUL = true; }
+            out.push('<li>' + applyInline(m[1].trim()) + '</li>');
+            continue;
+        }
+
+        // Ordered list item "1. ", "2. ", ...
+        m = /^\s*\d+\.\s+(.+)$/.exec(line);
+        if (m) {
+            flushPara();
+            if (!inOL) { closeLists(); out.push('<ol>'); inOL = true; }
+            out.push('<li>' + applyInline(m[1].trim()) + '</li>');
+            continue;
+        }
+
+        // Regular paragraph text (keep single newlines as <br/>)
+        para.push(applyInline(line));
+    }
+
+    flushPara();
+    closeLists();
+    return out.join('');
 }

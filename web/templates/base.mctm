@@ -34,7 +34,16 @@ logo: logo.jpg
 
 # Past History
 
-@table id:ph columns:"DM, HTN, TB, BA" @
+@table id:ph columns:"[DM, HTN, TB, BA]" @
+
+> "Menstrual History" if:patient_sex==Female
+
+{ "Cycle Info" layout:columns-2
+
+@number id:menarche_age label:"Menarche age" min:8 max:25 @
+@text id:cycle_len label:"Cycle length (days)" @
+
+}
 
 @list id:list_123 label:"List" @
 
@@ -50,3 +59,28 @@ Hello
 1. One
 2. Two
 3. Three
+
+{ Group1 layout:columns-2 if:patient_age>20
+
+This will be shown only is the patient is older than 20
+
+This is another para
+
+{ Group2 layout:hstack
+
+@checkbox id:pallor label:Pallor @
+@select id:pallor_grade options:[1,2,3,4] if:pallor==true @
+
+}
+
+}
+
+> General Examination
+
+{ "Vitals" id:vitals layout:hstack
+
+@number id:pulse label:"Pulse (/min)" @
+@text id:bp label:"BP (mmHg)" @
+@number id:rr label:"RR (/min)" @
+
+}
