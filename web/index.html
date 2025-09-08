@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Medical Case Template Generator (MCTM)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header>
+    <h1>Medical Case Template Generator (MCTM)</h1>
+    <div class="actions">
+      <input type="file" id="templateFileInput" accept=".mctm" />
+      <button id="loadDefaultTemplateBtn">Load Default Template</button>
+      <button id="exportJsonBtn">Export JSON</button>
+      <button id="exportPdfBtn">Export PDF</button>
+    </div>
+  </header>
+  <main>
+    <div id="formContainer"></div>
+  </main>
+  <footer>
+    <small>&copy; ShankarBUS</small>
+  </footer>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.3.0-beta.18/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.3.0-beta.18/vfs_fonts.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+
+</html>

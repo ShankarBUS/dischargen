@@ -1,0 +1,22 @@
+[
+    { "label": "PO", "description": "Oral" },
+    { "label": "IV", "description": "Intravenous" },
+    { "label": "IM", "description": "Intramuscular" },
+    { "label": "SC", "description": "Subcutaneous" },
+    { "label": "SL", "description": "Sublingual" },
+    { "label": "TOP", "description": "Topical" },
+    { "label": "TD", "description": "Transdermal" },
+    { "label": "PR", "description": "Rectal" },
+    { "label": "ID", "description": "Intradermal" },
+    { "label": "NAS", "description": "Nasal" },
+    { "label": "OPH", "description": "Ophthalmic" },
+    { "label": "OTI", "description": "Otic" },
+    { "label": "MUC", "description": "Mucosal" },
+    { "label": "PV", "description": "Vaginal" },
+    { "label": "EPI", "description": "Epidural" },
+    { "label": "IT", "description": "Intrathecal" },
+    { "label": "IP", "description": "Intraperitoneal" },
+    { "label": "IA", "description": "Intraarterial" },
+    { "label": "IC", "description": "Intracardiac" },
+    { "label": "PERC", "description": "Percutaneous" }
+]

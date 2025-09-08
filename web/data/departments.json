@@ -1,0 +1,478 @@
+[
+  {
+    "id": "dept_anatomy",
+    "label": "Anatomy",
+    "abbr": [
+      "ANAT"
+    ],
+    "alt": []
+  },
+  {
+    "id": "dept_anesthesiology",
+    "label": "Anesthesiology",
+    "abbr": [
+      "ANES"
+    ],
+    "alt": [
+      "Anaesthesiology"
+    ]
+  },
+  {
+    "id": "dept_biochemistry",
+    "label": "Biochemistry",
+    "abbr": [
+      "BIOCHEM"
+    ],
+    "alt": []
+  },
+  {
+    "id": "dept_burns_plastic",
+    "label": "Burns And Plastic Surgery",
+    "abbr": [
+      "BPS"
+    ],
+    "alt": [
+      "Burns & Plastic Surgery",
+      "Plastic & Reconstructive Surgery"
+    ]
+  },
+  {
+    "id": "dept_cardiology",
+    "label": "Cardiology",
+    "abbr": [
+      "CARD"
+    ],
+    "alt": [
+      "Heart Medicine"
+    ]
+  },
+  {
+    "id": "dept_cardiothoracic_surgery",
+    "label": "Cardio Thoracic Surgery",
+    "abbr": [
+      "CTS"
+    ],
+    "alt": [
+      "Cardiothoracic Surgery",
+      "CT Surgery"
+    ]
+  },
+  {
+    "id": "dept_community_medicine",
+    "label": "Community Medicine",
+    "abbr": [
+      "CM"
+    ],
+    "alt": [
+      "Preventive & Social Medicine",
+      "Public Health"
+    ]
+  },
+  {
+    "id": "dept_dental",
+    "label": "Dental",
+    "abbr": [
+      "DENT"
+    ],
+    "alt": [
+      "Dentistry"
+    ]
+  },
+  {
+    "id": "dept_dermatology",
+    "label": "Dermatology",
+    "abbr": [
+      "DERM"
+    ],
+    "alt": [
+      "Dermatology & Venereology",
+      "Skin"
+    ]
+  },
+  {
+    "id": "dept_diabetology",
+    "label": "Diabetology",
+    "abbr": [
+      "DIAB"
+    ],
+    "alt": [
+      "Diabetes Clinic",
+      "Diabetes"
+    ]
+  },
+  {
+    "id": "dept_emergency_medicine",
+    "label": "Emergency Medicine",
+    "abbr": [
+      "EM"
+    ],
+    "alt": [
+      "Casualty",
+      "Accident & Emergency"
+    ]
+  },
+  {
+    "id": "dept_ent",
+    "label": "Otorhinolaryngology - ENT",
+    "abbr": [
+      "ENT"
+    ],
+    "alt": [
+      "ENT",
+      "Ear Nose Throat",
+      "Otolaryngology"
+    ]
+  },
+  {
+    "id": "dept_forensic_toxicology",
+    "label": "Forensic Medicine And Toxicology",
+    "abbr": [
+      "FMT"
+    ],
+    "alt": [
+      "Forensic Medicine",
+      "Toxicology"
+    ]
+  },
+  {
+    "id": "dept_general_medicine",
+    "label": "General Medicine",
+    "abbr": [
+      "GM"
+    ],
+    "alt": [
+      "Internal Medicine",
+      "Medicine"
+    ]
+  },
+  {
+    "id": "dept_general_surgery",
+    "label": "General Surgery",
+    "abbr": [
+      "GS"
+    ],
+    "alt": [
+      "Surgery",
+      "General & Laparoscopic Surgery"
+    ]
+  },
+  {
+    "id": "dept_geriatrics",
+    "label": "Geriatrics",
+    "abbr": [
+      "GER"
+    ],
+    "alt": [
+      "Geriatric Medicine"
+    ]
+  },
+  {
+    "id": "dept_hypertension",
+    "label": "Hypertension",
+    "abbr": [
+      "HTN"
+    ],
+    "alt": [
+      "Blood Pressure Clinic",
+      "Hypertension Clinic"
+    ]
+  },
+  {
+    "id": "dept_medical_board",
+    "label": "Medical Board",
+    "abbr": [
+      "MEDBOARD"
+    ],
+    "alt": []
+  },
+  {
+    "id": "dept_medical_oncology",
+    "label": "Medical Oncology",
+    "abbr": [
+      "MEDONC"
+    ],
+    "alt": [
+      "Medical Cancer Care"
+    ]
+  },
+  {
+    "id": "dept_medical_gastroenterology",
+    "label": "Medical Gastroenterology - MGE",
+    "abbr": [
+      "MGE"
+    ],
+    "alt": [
+      "Gastroenterology",
+      "Medical Gastro"
+    ]
+  },
+  {
+    "id": "dept_microbiology",
+    "label": "Microbiology",
+    "abbr": [
+      "MICRO"
+    ],
+    "alt": []
+  },
+  {
+    "id": "dept_nephrology",
+    "label": "Nephrology",
+    "abbr": [
+      "NEPH"
+    ],
+    "alt": [
+      "Renal Medicine"
+    ]
+  },
+  {
+    "id": "dept_neurology",
+    "label": "Neurology",
+    "abbr": [
+      "NEURO"
+    ],
+    "alt": [
+      "Neurological Medicine"
+    ]
+  },
+  {
+    "id": "dept_neurosurgery",
+    "label": "Neuro Surgery",
+    "abbr": [
+      "NS"
+    ],
+    "alt": [
+      "Neurosurgery",
+      "Neurological Surgery"
+    ]
+  },
+  {
+    "id": "dept_obg",
+    "label": "Obstetrics And Gynaecology - OG",
+    "abbr": [
+      "OBG"
+    ],
+    "alt": [
+      "Obstetrics & Gynecology",
+      "OBGYN",
+      "Women’s Health"
+    ]
+  },
+  {
+    "id": "dept_ophthalmology",
+    "label": "Ophthalmology",
+    "abbr": [
+      "OPH"
+    ],
+    "alt": [
+      "Eye",
+      "Eye Clinic"
+    ]
+  },
+  {
+    "id": "dept_orthopedics",
+    "label": "Orthopedics",
+    "abbr": [
+      "ORTHO"
+    ],
+    "alt": [
+      "Orthopaedics",
+      "Bone & Joint"
+    ]
+  },
+  {
+    "id": "dept_paediatrics",
+    "label": "Paediatrics",
+    "abbr": [
+      "PED"
+    ],
+    "alt": [
+      "Pediatrics",
+      "Child Health"
+    ]
+  },
+  {
+    "id": "dept_paediatric_surgery",
+    "label": "Paediatric Surgery",
+    "abbr": [
+      "PEDSURG"
+    ],
+    "alt": [
+      "Pediatric Surgery",
+      "Child Surgery"
+    ]
+  },
+  {
+    "id": "dept_pain_palliative",
+    "label": "Pain And Palliative",
+    "abbr": [
+      "PALL"
+    ],
+    "alt": [
+      "Palliative Care",
+      "Pain Clinic"
+    ]
+  },
+  {
+    "id": "dept_pathology_lab",
+    "label": "Pathology and Lab Medicine",
+    "abbr": [
+      "PATH"
+    ],
+    "alt": [
+      "Pathology",
+      "Laboratory Medicine",
+      "Lab"
+    ]
+  },
+  {
+    "id": "dept_pediatrics_emergency",
+    "label": "Pediatrics Emergency OP",
+    "abbr": [
+      "PEDER"
+    ],
+    "alt": [
+      "Pediatric Emergency",
+      "Children Emergency"
+    ]
+  },
+  {
+    "id": "dept_pmr",
+    "label": "Physical Medicine And Rehabilitation - PMR",
+    "abbr": [
+      "PMR"
+    ],
+    "alt": [
+      "Rehabilitation",
+      "Physiatry",
+      "Physical Medicine & Rehab"
+    ]
+  },
+  {
+    "id": "dept_plastic_surgery",
+    "label": "Plastic Surgery",
+    "abbr": [
+      "PLAST"
+    ],
+    "alt": [
+      "Plastic & Reconstructive Surgery",
+      "Reconstructive Surgery"
+    ]
+  },
+  {
+    "id": "dept_psychiatry",
+    "label": "Psychiatry",
+    "abbr": [
+      "PSY"
+    ],
+    "alt": [
+      "Mental Health",
+      "Behavioral Medicine"
+    ]
+  },
+  {
+    "id": "dept_radiation_oncology",
+    "label": "Radiation Oncology",
+    "abbr": [
+      "RADONC"
+    ],
+    "alt": [
+      "Radiotherapy",
+      "Radiation Therapy"
+    ]
+  },
+  {
+    "id": "dept_radiodiagnosis",
+    "label": "Radiodiagnosis",
+    "abbr": [
+      "RADIO"
+    ],
+    "alt": [
+      "Radiology",
+      "Diagnostic Imaging",
+      "Imaging"
+    ]
+  },
+  {
+    "id": "dept_rheumatology",
+    "label": "Rheumatology",
+    "abbr": [
+      "RHEUM"
+    ],
+    "alt": []
+  },
+  {
+    "id": "dept_surgical_gastroenterology",
+    "label": "Surgical Gastroenterology - SGE",
+    "abbr": [
+      "SGE"
+    ],
+    "alt": [
+      "Surgical Gastroenterology",
+      "GI Surgery"
+    ]
+  },
+  {
+    "id": "dept_surgical_oncology",
+    "label": "Surgical Oncology",
+    "abbr": [
+      "SURGONC"
+    ],
+    "alt": [
+      "Oncosurgery",
+      "Cancer Surgery"
+    ]
+  },
+  {
+    "id": "dept_thoracic_medicine",
+    "label": "Thoracic Medicine",
+    "abbr": [
+      "THOR"
+    ],
+    "alt": [
+      "Pulmonology",
+      "Respiratory Medicine",
+      "Chest Medicine"
+    ]
+  },
+  {
+    "id": "dept_transfusion_bloodbank",
+    "label": "Transfusion Medicine And Blood Bank",
+    "abbr": [
+      "TMBB"
+    ],
+    "alt": [
+      "Blood Bank",
+      "Transfusion Medicine"
+    ]
+  },
+  {
+    "id": "dept_urology",
+    "label": "Urology",
+    "abbr": [
+      "URO"
+    ],
+    "alt": []
+  },
+  {
+    "id": "dept_vascular_surgery",
+    "label": "Vascular Surgery",
+    "abbr": [
+      "VASC"
+    ],
+    "alt": [
+      "Vascular & Endovascular Surgery",
+      "Vascular"
+    ]
+  },
+  {
+    "id": "dept_yoga_naturopathy",
+    "label": "Yoga Naturopathy",
+    "abbr": [
+      "YOGA"
+    ],
+    "alt": [
+      "Yoga & Naturopathy",
+      "Integrative Medicine"
+    ]
+  }
+]

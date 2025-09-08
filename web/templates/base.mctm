@@ -1,0 +1,52 @@
+@mctm 1.0
+---
+template_id: base
+title: "Discharge Summary"
+version: 1
+hospital: "திருநெல்வேலி அரசு மருத்துவக்கல்லூரி மருத்துவமனை"
+department: "Department of General Medicine"
+unit: "Medical Unit #"
+pdf_header: "Chief: Dr. Whatever Name"
+logo: logo.jpg
+---
+
+# Demographics
+
+@text id:patient_name label:"Name" required @
+@number id:patient_age label:"Age" required @
+@select id:patient_sex label:"Sex" options:"[Male, Female, Other]" required @
+@text id:patient_pin label:"PIN" default:"315010" required @
+@date id:date_admission label:"Date of Admission" required @
+@date id:date_discharge label:"Date of Discharge" required @
+@computed id:duration_of_stay label:"Duration of Stay (days)" formula:"((new Date(date_discharge) - new Date(date_admission)) / (1000*60*60*24)).toString() + ' days'" format:decimal(0) @
+
+# Diagnosis
+
+@diagnosis id:diagnosis placeholder:"Search ICD-11 or enter custom diagnosis" required @
+
+# Chief Complaints
+
+@complaints id:chief_complaints placeholder:"Search or enter a complaint" required @
+
+# History of Presenting Illness
+
+@text id:hopi default:"The patient was apparently normal before..." multiline required @
+
+# Past History
+
+@table id:ph columns:"DM, HTN, TB, BA" @
+
+@list id:list_123 label:"List" @
+
+@checkbox id:cb label:"Check?" @
+
+Check?: ⊕
+
+திருநெல்வேலி **திருநெல்வேலி** **Hi** *hi* ***hi***
+
+Hello
+- list_123
+- list
+1. One
+2. Two
+3. Three

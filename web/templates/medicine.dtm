@@ -1,0 +1,67 @@
+NOTE: This is for reference. base.dtm is the base template with new syntax. Delete after implementation.
+
+## Histories
+```textarea id:hpi label:"History of Presenting Illness" rows:6 placeholder:"Narrative HPI..."
+```
+```comorbidities id:past_history label:"Past History / Comorbidities"
+```
+```personal-history id:personal_history label:"Personal History"
+```
+```menstrual-history id:menstrual_history label:"Menstrual History" if:patient_sex==Female
+```
+```textarea id:treatment_history label:"Treatment History" rows:3
+```
+```textarea id:allergy_history label:"Allergy History" rows:3
+```
+
+## Examination on Admission
+```general-exam id:general_exam_adm label:"General Examination (Admission)"
+```
+```textarea id:systemic_exam_adm label:"Systemic Examination (Brief)" rows:5 placeholder:"CVS: ... RS: ... Abd: ... CNS: ..."
+```
+```textarea id:local_exam_adm label:"Local Examination" rows:4
+```
+
+## Examination on Discharge
+```general-exam id:general_exam_dis label:"General Examination (Discharge)"
+```
+```textarea id:systemic_exam_dis label:"Systemic Examination (Brief) - Discharge" rows:5
+```
+```textarea id:local_exam_dis label:"Local Examination - Discharge" rows:4
+```
+
+## Hospital Course
+```textarea id:hospital_course label:"Hospital Course" rows:8
+```
+
+## Investigations
+```investigations id:investigations label:"Investigations Performed"
+```
+
+## Opinions Obtained
+```opinions id:opinions label:"Opinions Obtained"
+```
+
+## Treatment Given (In-Hospital)
+```drug-treatment id:treatment_given label:"Treatment Given During Stay"
+```
+
+## Advice On Discharge
+```drug-treatment id:discharge_advice_drugs label:"Drugs on Discharge"
+```
+```textarea id:discharge_instructions label:"Additional Instructions" rows:5
+```
+
+## Follow Up Advice
+```followup id:follow_up label:"Follow Up Advice"
+```
+
+## Discharge Summary Details
+```text id:crmi_name label:"CRMI Name"
+```
+```text id:pg_name label:"PG Name"
+```
+```text id:assistant_name label:"Assistant Name"
+```
+```text id:chief_unit_name label:"Chief of Unit"
+```
