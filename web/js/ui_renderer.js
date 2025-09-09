@@ -2,44 +2,112 @@ import { icdSearchWithCache, snomedSearchWithCache } from './search_handler.js';
 import { AutoCompleteBox } from './components/autocompletebox.js';
 import { evaluateCondition } from './conditional.js';
 import { applyValidation } from './validation.js';
+import { parseMarkdown, escapeHtml } from './md_parser.js';
 
 export function renderAST(root, state) {
-    const renderNodes = (nodes, parent) => {
+    // Recursively render nodes. renderUI flag controls DOM creation; ui:hidden nodes still register values.
+    if (!state.sectionOptionals) state.sectionOptionals = {};
+    const renderNodes = (nodes, parent, renderUI = true) => {
         for (const node of nodes) {
-            if (!node || node.type === 'include') continue; // includes already expanded parse-time
+            if (!node || node.type === 'include') continue;
+            const hideUI = (node.ui && node.ui.hidden) === true; // ui.hidden boolean controls UI visibility
+            const nodeRenderUI = renderUI && !hideUI;
+
             if (node.type === 'section') {
-                const sectionEl = document.createElement('div');
-                sectionEl.className = 'section';
-                if (node.if) sectionEl.dataset.condition = node.if;
-                const h = document.createElement('h1');
-                h.textContent = node.title;
-                h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
-                sectionEl.appendChild(h);
-                const body = document.createElement('div');
-                renderNodes(node.children || [], body);
-                sectionEl.appendChild(body);
-                parent.appendChild(sectionEl);
+                // Unified section rendering (optional / non-optional) with reduced duplication
+                const buildSectionElements = () => {
+                    const sectionEl = document.createElement('div');
+                    sectionEl.className = 'section';
+                    if (node.if) sectionEl.dataset.condition = node.if;
+                    if (node.pdf && node.pdf.hidden) sectionEl.dataset.pdfHidden = 'true';
+                    if (hideUI) sectionEl.dataset.uiHidden = 'true';
+
+                    const headerRow = document.createElement('div');
+                    headerRow.className = 'section-header-row';
+                    const h = document.createElement('h1');
+                    h.textContent = node.title || '';
+                    h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
+                    headerRow.appendChild(h);
+
+                    let checkbox = null;
+                    if (node.optional === true) {
+                        checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'section-optional-checkbox';
+                        // Preserve prior state if re-rendering; fall back to node.default (or checked by default)
+                        const prev = node.id && state.sectionOptionals[node.id];
+                        const initial = (prev ? prev.checked : (node.default === false ? false : true));
+                        checkbox.checked = initial;
+                        headerRow.appendChild(checkbox);
+                    }
+                    sectionEl.appendChild(headerRow);
+
+                    const body = document.createElement('div');
+                    body.className = 'section-body';
+                    renderNodes(node.children || [], body, nodeRenderUI);
+                    sectionEl.appendChild(body);
+
+                    if (checkbox) {
+                        const syncBody = () => { body.style.display = checkbox.checked ? '' : 'none'; };
+                        checkbox.addEventListener('change', syncBody);
+                        syncBody();
+                        if (node.id) state.sectionOptionals[node.id] = checkbox;
+                    }
+                    return sectionEl;
+                };
+
+                if (nodeRenderUI) {
+                    parent.appendChild(buildSectionElements());
+                } else {
+                    // If section is opted for ui.hidden and is optional and unchecked, skip entirely;
+                    if (node.optional === true && state.sectionOptionals[node.id]
+                        && !state.sectionOptionals[node.id].checked) {
+                        // Skip rendering
+                        continue;
+                    }
+                    // Else render children without wrapper/header.
+                    renderNodes(node.children || [], parent, false);
+                }
             } else if (node.type === 'group') {
-                const groupEl = renderGroup(node, state);
-                if (groupEl) parent.appendChild(groupEl);
+                if (nodeRenderUI) {
+                    const groupEl = renderGroup(node, state, renderNodes);
+                    if (groupEl) parent.appendChild(groupEl);
+                } else {
+                    (node.children || []).forEach(ch => {
+                        if (!ch) return;
+                        if (ch.type === 'field') registerHiddenUIField(ch, state);
+                        else if (ch.type === 'group' || ch.type === 'section') renderNodes([ch], parent, false);
+                    });
+                }
             } else if (node.type === 'field') {
-                const fieldEl = renderField(node, state); if (fieldEl) parent.appendChild(fieldEl);
+                if (hideUI) { registerHiddenUIField(node, state); continue; }
+                const fieldEl = renderField(node, state);
+                if (fieldEl && nodeRenderUI) parent.appendChild(fieldEl);
             }
         }
     };
-    renderNodes(state.ast || [], root);
+    renderNodes(state.ast || [], root, true);
 }
 
-function renderGroup(node, state) {
+function registerHiddenUIField(node, state) {
+    if (!node || !node.id) return;
+    if (state.fieldRefs[node.id]) return;
+    state.fieldRefs[node.id] = { value: node.default !== undefined ? node.default : '' };
+}
+
+function renderGroup(node, state, renderNodes) {
     const wrapper = document.createElement('div');
     wrapper.className = 'group';
     wrapper.dataset.groupId = node.id || '';
     if (node.if) wrapper.dataset.condition = node.if;
+    if (node.pdf && node.pdf.hidden) wrapper.dataset.pdfHidden = 'true';
+    if (node.ui && node.ui.hidden) wrapper.dataset.uiHidden = 'true';
     if (node.title) {
         const h = document.createElement('h2');
         h.textContent = node.title;
         wrapper.appendChild(h);
     }
+
     const layout = String(node.layout || 'vstack');
     const body = document.createElement('div');
     body.className = 'group-body';
@@ -50,10 +118,16 @@ function renderGroup(node, state) {
         if (m) body.classList.add('layout-columns', `cols-${m[1]}`);
         else body.classList.add('layout-vstack');
     }
+
     (node.children || []).forEach(ch => {
         if (!ch || ch.type === 'include') return;
-        if (ch.type === 'group') { const el = renderGroup(ch, state); if (el) body.appendChild(el); }
-        else if (ch.type === 'field') { const el = renderField(ch, state); if (el) body.appendChild(el); }
+        if (ch.type === 'group') {
+            if (ch.ui && ch.ui.hidden) renderNodes([ch], body, false);
+            else { const el = renderGroup(ch, state, renderNodes); if (el) body.appendChild(el); }
+        } else if (ch.type === 'field') {
+            if (ch.ui && ch.ui.hidden) { registerHiddenUIField(ch, state); return; }
+            const el = renderField(ch, state); if (el) body.appendChild(el);
+        }
     });
     wrapper.appendChild(body);
     return wrapper;
@@ -90,7 +164,7 @@ function renderField(node, state) {
         wrapper.classList.remove('inline');
         wrapper.classList.add('static-block');
         const div = document.createElement('div');
-        div.innerHTML = renderMarkdownBasic(node.content || '');
+        div.innerHTML = renderMarkdownHtml(parseMarkdown(node.content || ''));
         wrapper.appendChild(div);
         state.fieldRefs[node.id || ('static_' + Math.random().toString(36).slice(2))] = { value: node.content };
     } else if (node.fieldType === 'computed') {
@@ -263,7 +337,7 @@ function renderComplaintsField(node, wrapper, state) {
     function addEntry(complaint, duration, unit = 'days') {
         const row = document.createElement('div');
         row.className = 'complaint-row';
-    const cAc = new AutoCompleteBox();
+        const cAc = new AutoCompleteBox();
         cAc.setAttribute('placeholder', node.placeholder || '');
         cAc.value = complaint || '';
         cAc.fetcher = snomedSearchWithCache;
@@ -462,8 +536,8 @@ function renderTableField(node, wrapper, state) {
         tbody.appendChild(tr);
     }
     addBtn.addEventListener('click', () => addRow());
-    tableWrapper.appendChild(addBtn);
     wrapper.appendChild(tableWrapper);
+    wrapper.appendChild(addBtn);
 
     state.fieldRefs[node.id] = {
         get value() {
@@ -583,74 +657,35 @@ export function evaluateComputedAll(state) {
     });
 }
 
-export function renderMarkdownBasic(md) {
-    if (!md) return '';
-    const text = String(md).replace(/\r\n?/g, '\n');
-    const lines = text.split('\n');
-
-    const out = [];
-    let para = [];
-    let inUL = false;
-    let inOL = false;
-
-    const escapeHtml = (s) => s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;');
-
-    const applyInline = (s) => {
-        // Escape first, then transform inline markdown
-        let t = escapeHtml(s);
-        t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        return t;
-    };
-
-    const flushPara = () => {
-        if (para.length) {
-            out.push('<p>' + para.join('<br/>') + '</p>');
-            para = [];
-        }
-    };
-
-    const closeLists = () => {
-        if (inUL) { out.push('</ul>'); inUL = false; }
-        if (inOL) { out.push('</ol>'); inOL = false; }
-    };
-
-    for (const raw of lines) {
-        const line = raw.replace(/\s+$/,'');
-        const trimmed = line.trim();
-
-        // Blank line => paragraph/list boundary
-        if (!trimmed) {
-            flushPara();
-            closeLists();
-            continue;
-        }
-
-        // Unordered list item "- " or "* "
-        let m = /^\s*[-*]\s+(.+)$/.exec(line);
-        if (m) {
-            flushPara();
-            if (!inUL) { closeLists(); out.push('<ul>'); inUL = true; }
-            out.push('<li>' + applyInline(m[1].trim()) + '</li>');
-            continue;
-        }
-
-        // Ordered list item "1. ", "2. ", ...
-        m = /^\s*\d+\.\s+(.+)$/.exec(line);
-        if (m) {
-            flushPara();
-            if (!inOL) { closeLists(); out.push('<ol>'); inOL = true; }
-            out.push('<li>' + applyInline(m[1].trim()) + '</li>');
-            continue;
-        }
-
-        // Regular paragraph text (keep single newlines as <br/>)
-        para.push(applyInline(line));
+// Render parsed markdown AST into HTML (safe, no raw HTML passthrough)
+export function renderMarkdownHtml(ast) {
+    function runsToHtml(runs) {
+        return runs.map(r => {
+            let t = escapeHtml(r.text);
+            if (r.bold) t = `<strong>${t}</strong>`;
+            if (r.italic) t = `<em>${t}</em>`;
+            return t;
+        }).join('');
     }
 
-    flushPara();
-    closeLists();
-    return out.join('');
+    function renderBlocks(blocks) {
+        return blocks.map(b => {
+            if (b.type === 'paragraph') return `<p>${runsToHtml(b.runs).replace(/\n/g, '<br/>')}</p>`;
+            if (b.type === 'list') {
+                const tag = b.ordered ? 'ol' : 'ul';
+                const items = b.items.map(it => `<li>${renderListItem(it)}</li>`).join('');
+                return `<${tag}>${items}</${tag}>`;
+            }
+            return '';
+        }).join('');
+    }
+
+    function renderListItem(item) {
+        // If only one paragraph block return inline, else concatenate rendered blocks
+        if (item.blocks.length === 1 && item.blocks[0].type === 'paragraph') {
+            return runsToHtml(item.blocks[0].runs).replace(/\n/g, '<br/>');
+        }
+        return renderBlocks(item.blocks);
+    }
+    return renderBlocks(ast);
 }

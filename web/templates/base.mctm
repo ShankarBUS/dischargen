@@ -3,36 +3,55 @@
 template_id: base
 title: "Discharge Summary"
 version: 1
-hospital: "திருநெல்வேலி அரசு மருத்துவக்கல்லூரி மருத்துவமனை"
+hospital: "Tirunelveli Medical College Hospital, Tirunelveli"
 department: "Department of General Medicine"
 unit: "Medical Unit #"
 pdf_header: "Chief: Dr. Whatever Name"
 logo: logo.jpg
 ---
 
-# Demographics
+1. List
+    - Sub
+    - Sub 2
+        1. Sub sub
+        2. Sub sub 2
+            - Sub sub sub 3
+
+> Demographics
+
+{ "" id:demographics_columns layout:columns-2
+{ "" id:demographics_columns_1 layout:vstack
 
 @text id:patient_name label:"Name" required @
-@number id:patient_age label:"Age" required @
-@select id:patient_sex label:"Sex" options:"[Male, Female, Other]" required @
+@number id:patient_age label:"Age" required pdf.hidden:true @
+@select id:patient_sex label:"Sex" options:"[Male, Female, Other]" required pdf.hidden:true @
+@computed id:patient_age_sex label:"Age/Sex" formula:"patient_age + '/' + patient_sex" ui.hidden:true @
 @text id:patient_pin label:"PIN" default:"315010" required @
+
+}
+
+{ "" id:demographics_columns_2 layout:vstack
+
 @date id:date_admission label:"Date of Admission" required @
 @date id:date_discharge label:"Date of Discharge" required @
 @computed id:duration_of_stay label:"Duration of Stay (days)" formula:"((new Date(date_discharge) - new Date(date_admission)) / (1000*60*60*24)).toString() + ' days'" format:decimal(0) @
 
-# Diagnosis
+}
+}
+
+> "Final Diagnosis"
 
 @diagnosis id:diagnosis placeholder:"Search ICD-11 or enter custom diagnosis" required @
 
-# Chief Complaints
+> "Chief Complaints"
 
 @complaints id:chief_complaints placeholder:"Search or enter a complaint" required @
 
-# History of Presenting Illness
+> "History of Presenting Illness"
 
 @text id:hopi default:"The patient was apparently normal before..." multiline required @
 
-# Past History
+> "Past History"
 
 @table id:ph columns:"[DM, HTN, TB, BA]" @
 
@@ -45,36 +64,6 @@ logo: logo.jpg
 
 }
 
-@list id:list_123 label:"List" @
-
-@checkbox id:cb label:"Check?" @
-
-Check?: ⊕
-
-திருநெல்வேலி **திருநெல்வேலி** **Hi** *hi* ***hi***
-
-Hello
-- list_123
-- list
-1. One
-2. Two
-3. Three
-
-{ Group1 layout:columns-2 if:patient_age>20
-
-This will be shown only is the patient is older than 20
-
-This is another para
-
-{ Group2 layout:hstack
-
-@checkbox id:pallor label:Pallor @
-@select id:pallor_grade options:[1,2,3,4] if:pallor==true @
-
-}
-
-}
-
 > General Examination
 
 { "Vitals" id:vitals layout:hstack
@@ -84,3 +73,7 @@ This is another para
 @number id:rr label:"RR (/min)" @
 
 }
+
+> "Opinions Obtained" optional
+
+@table id:opinions columns:"[Date, Department, Impression, Advice]" @

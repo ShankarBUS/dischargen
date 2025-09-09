@@ -1,7 +1,7 @@
 import { parseMCTMResolved } from './js/mctm/mctm_parser.js';
 import { lintMCTM } from './js/mctm/mctm_linter.js';
 import { validateAll } from './js/validation.js';
-import { renderAST, reevaluateConditions, evaluateComputedAll, getFieldValueFromRef } from './js/renderer.js';
+import { renderAST, reevaluateConditions, evaluateComputedAll, getFieldValueFromRef } from './js/ui_renderer.js';
 import { renderPDF } from './js/pdf_renderer.js';
 
 const formContainer = document.getElementById('formContainer');
@@ -98,6 +98,14 @@ function collectData() {
   Object.entries(state.fieldRefs).forEach(([id, ref]) => {
     obj[id] = getFieldValueFromRef(ref);
   });
+  // Capture optional section states (checkboxes) if present
+  if (state.sectionOptionals) {
+    const map = {};
+    Object.entries(state.sectionOptionals).forEach(([secId, cb]) => {
+      map[secId] = !!(cb && cb.checked);
+    });
+    obj._sectionOptionals = map;
+  }
   if (state.meta) obj._meta = state.meta;
   return obj;
 }
@@ -134,6 +142,17 @@ function restoreAutosave() {
   try {
     const raw = localStorage.getItem(state.autosaveKey); if (!raw) return;
     const data = JSON.parse(raw);
+    // Restore optional section checkbox states first (so dependent visibility correct)
+    if (data._sectionOptionals && state.sectionOptionals) {
+      Object.entries(data._sectionOptionals).forEach(([secId, val]) => {
+        const cb = state.sectionOptionals[secId];
+        if (cb) {
+          cb.checked = !!val;
+          // Trigger body hide/show
+          cb.dispatchEvent(new Event('change'));
+        }
+      });
+    }
     Object.entries(data).forEach(([id, val]) => {
       const ref = state.fieldRefs[id];
       if (!ref) return;

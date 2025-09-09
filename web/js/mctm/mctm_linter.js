@@ -4,19 +4,19 @@ export const MCTM_SPEC = {
   version: '1.0',
   meta: { required: ['template_id', 'title', 'version'], optional: ['logo', 'hospital', 'department', 'unit', 'pdf_header', 'pdf_footer'] },
   fieldTypes: {
-  text: { required: ['id'], optional: ['label', 'placeholder', 'multiline', 'required', 'pattern', 'default', 'if', 'nooutput'] },
-  number: { required: ['id'], optional: ['label', 'placeholder', 'required', 'min', 'max', 'pattern', 'default', 'if', 'nooutput'] },
-  checkbox: { required: ['id'], optional: ['label', 'trueValue', 'falseValue', 'required', 'default', 'if', 'nooutput'] },
-  date: { required: ['id'], optional: ['label', 'required', 'default', 'if', 'nooutput'] },
-  select: { required: ['id'], optional: ['label', 'options', 'source', 'multiple', 'required', 'default', 'if', 'nooutput'] },
-  table: { required: ['id'], optional: ['label', 'columns', 'required', 'default', 'if', 'nooutput'] },
-  list: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'nooutput'] },
-  complaints: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'nooutput'] },
-  diagnosis: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'nooutput'] },
-  image: { required: ['id'], optional: ['label', 'mode', 'maxSizeKB', 'if', 'nooutput'] },
-  static: { required: [], optional: ['content', 'if', 'nooutput'] },
-  computed: { required: ['id', 'formula'], optional: ['label', 'format', 'if', 'nooutput'] },
-  hidden: { required: ['id'], optional: ['default', 'nooutput'] },
+    text: { required: ['id'], optional: ['label', 'placeholder', 'multiline', 'required', 'pattern', 'default', 'if', 'pdf', 'ui'] },
+    number: { required: ['id'], optional: ['label', 'placeholder', 'required', 'min', 'max', 'pattern', 'default', 'if', 'pdf', 'ui'] },
+    checkbox: { required: ['id'], optional: ['label', 'trueValue', 'falseValue', 'required', 'default', 'if', 'pdf', 'ui'] },
+    date: { required: ['id'], optional: ['label', 'required', 'default', 'if', 'pdf', 'ui'] },
+    select: { required: ['id'], optional: ['label', 'options', 'source', 'multiple', 'required', 'default', 'if', 'pdf', 'ui'] },
+    table: { required: ['id'], optional: ['label', 'columns', 'required', 'default', 'if', 'pdf', 'ui'] },
+    list: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
+    complaints: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
+    diagnosis: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
+    image: { required: ['id'], optional: ['label', 'mode', 'maxSizeKB', 'if', 'pdf', 'ui'] },
+    static: { required: [], optional: ['content', 'if', 'pdf', 'ui'] },
+    computed: { required: ['id', 'formula'], optional: ['label', 'format', 'if', 'pdf', 'ui'] },
+    hidden: { required: ['id'], optional: ['default', 'pdf', 'ui'] },
   }
 };
 
@@ -75,7 +75,26 @@ export function lintMCTM({ source, ast, meta }) {
     }
     if (!node.label && !['static', 'hidden', 'computed'].includes(node.fieldType)) diagnostics.push(warn(`Field ${node.id} missing label`, node.line));
     const allowed = new Set([...spec.required, ...spec.optional, 'fieldType', 'type', 'line']);
-    Object.keys(node).forEach(k => { if (!allowed.has(k)) diagnostics.push(warn(`Property '${k}' not recognized for type ${node.fieldType}`, node.line)); });
+    Object.keys(node).forEach(k => {
+      if (k === 'pdf' || k === 'ui') return; // handled below
+      if (!allowed.has(k)) diagnostics.push(warn(`Property '${k}' not recognized for type ${node.fieldType}`, node.line));
+    });
+
+    // Validate namespaced visibility objects
+    ['pdf','ui'].forEach(ns => {
+      const val = node[ns];
+      if (val == null) return;
+      if (typeof val !== 'object' || Array.isArray(val)) {
+        diagnostics.push(warn(`${ns} should be an object (e.g., { hidden: true })`, node.line));
+        return;
+      }
+      const allowedSub = new Set(['hidden']);
+      Object.keys(val).forEach(sub => {
+        if (!allowedSub.has(sub)) diagnostics.push(warn(`Unknown ${ns}.* property '${sub}'`, node.line));
+        else if (sub === 'hidden' && typeof val[sub] !== 'boolean') diagnostics.push(warn(`${ns}.hidden should be boolean`, node.line));
+      });
+    });
+    
     if (node.fieldType === 'computed') {
       if (node.formula) {
         try { new Function('ctx', `with(ctx){ return ${node.formula}; }`); } catch (e) { diagnostics.push(err(`Invalid formula for ${node.id}: ${e.message}`, node.line)); }

@@ -39,24 +39,18 @@ export function parseMCTM(source) {
       metaParsed = true; continue;
     }
 
-    // Sections (new syntax: > "Title" id:... if:...)
+    // Sections (> "Title" id:... if:...)
     const secMatch = /^>\s+(.+)$/.exec(line);
     if (secMatch && containerStack.length === 0) { // sections only at root level
       const startLine = i + 1;
       const { title, props } = parseTitleAndProps(secMatch[1]);
       const section = { type: 'section', title, children: [], line: startLine, ...props };
-      if (!section.id && section.title) section.id = slugify(section.title);
+  if (!section.id && section.title) section.id = slugify(section.title);
+  // Ensure optional property is boolean if present
+  if (section.optional !== undefined) section.optional = !!section.optional;
       ast.push(section);
       currentSection = section;
       i++; continue;
-    }
-
-    // Legacy sections (start with #)
-    const headingMatch = /^#\s+(.+)$/.exec(line);
-    if (headingMatch && containerStack.length === 0) {
-      currentSection = { type: 'section', title: headingMatch[1].trim(), children: [], line: i + 1 };
-      if (!currentSection.id) currentSection.id = slugify(currentSection.title);
-      ast.push(currentSection); i++; continue;
     }
 
     // Group start: { "Group Title" id:... layout:... if:...  (ends with a line containing only })
@@ -136,26 +130,69 @@ export function parseMCTM(source) {
 }
 
 function parseProps(chunk) {
+  if (!chunk) return {};
+
   const obj = {};
-  if (!chunk) return obj;
   const tokens = tokenize(chunk);
-  for (const t of tokens) {
-    if (t.includes(':')) {
-      const idx = t.indexOf(':');
-      const key = t.slice(0, idx).trim();
-      let val = t.slice(idx + 1).trim();
-      if (val === '') val = true;
-      val = stripQuotes(val);
-      if (/^\[.*\]$/.test(val)) {
-        const inner = val.slice(1, -1).trim();
-        obj[key] = inner ? inner.split(/\s*,\s*/).map(v => decodeURIComponent(stripQuotes(v).trim())) : [];
-      } else {
-        obj[key] = decodeURIComponent(val);
-      }
-    } else {
+
+  const nsTargets = new Set(['pdf','ui']);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    const colonIdx = t.indexOf(':');
+    if (colonIdx === -1) {
+      // Bare flag -> boolean true
       obj[t] = true;
+      continue;
     }
+
+    let key = t.slice(0, colonIdx).trim();
+    let val = t.slice(colonIdx + 1).trim();
+    if (val === '') val = true; // key:  (empty) treated as boolean
+
+    // Normalize string value (strip quotes, then decode) when not boolean true
+    if (val !== true) {
+      val = stripQuotes(val);
+      // Array syntax: [a,b,c]  (no nested arrays expected)
+      if (typeof val === 'string' && val.length >= 2 && val[0] === '[' && val[val.length - 1] === ']') {
+        const inner = val.slice(1, -1).trim();
+        if (inner) {
+          // Split on commas with trimming;
+            const parts = inner.split(',');
+            const arr = new Array(parts.length);
+            for (let j = 0; j < parts.length; j++) {
+              const raw = stripQuotes(parts[j].trim());
+              arr[j] = decodeURIComponent(raw);
+            }
+            val = arr;
+        } else {
+          val = [];
+        }
+      } else if (val !== true) {
+        // Decode URI components only for non-boolean, non-array scalars
+        val = decodeURIComponent(val);
+      }
+    }
+
+    // Inline namespace folding (e.g. pdf.hidden => obj.pdf.hidden = true)
+    // Only fold one level (ns.prop).
+    const dotPos = key.indexOf('.');
+    if (dotPos > 0) {
+      const ns = key.slice(0, dotPos);
+      const prop = key.slice(dotPos + 1);
+      if (prop && nsTargets.has(ns)) {
+        const cur = obj[ns];
+        if (!cur || typeof cur !== 'object' || Array.isArray(cur)) {
+          obj[ns] = {};
+        }
+        obj[ns][prop] = val;
+        continue;
+      }
+    }
+
+    obj[key] = val;
   }
+
   return obj;
 }
 

@@ -84,32 +84,43 @@ export class AutoCompleteBox extends HTMLElement {
         this.dispatchEvent(new CustomEvent('text-changed', { detail: { value: q }, bubbles: true }));
         if (this._timer) clearTimeout(this._timer);
         if (!q) { this._hideResults(); return; }
+        // Show immediate custom option (Add: q) before fetch completes
+        this._renderResults(true); // pending state
         this._timer = setTimeout(async () => {
             try {
+                const fetchQuery = this._lastQuery;
                 let results = [];
                 if (typeof this.fetcher === 'function') {
-                    results = await this.fetcher(q);
+                    results = await this.fetcher(fetchQuery);
                 }
+                // Ignore if query changed meanwhile
+                if (fetchQuery !== this._lastQuery) return;
                 this._results = Array.isArray(results) ? results : [];
-                this._renderResults();
+                this._renderResults(false);
             } catch { }
         }, this.debounceMs);
     }
 
-    _renderResults() {
+    // Render results list.
+    // pending=true => only show the Add option (custom entry) while fetch in progress.
+    _renderResults(pending = false) {
         const q = this._lastQuery;
-        const items = this._results;
-        if (!items.length) {
-            this._resultsBox.innerHTML = `<div data-idx='-1'>Add: ${_escape(q)}</div>`;
-            this._activeIndex = -1;
-        } else {
-            this._resultsBox.innerHTML = items.map((it, i) => {
+        if (!q) { this._hideResults(); return; }
+        let html = `<div data-idx='-1' class='ac-add-option'>Add: ${_escape(q)}</div>`;
+        if (!pending && this._results.length) {
+            // Avoid duplicating the same label as custom add option
+            const qLower = q.toLowerCase();
+            const filtered = this._results.filter(it => (this.getItemLabel(it) || '').trim().toLowerCase() !== qLower);
+            html += filtered.map((it, i) => {
                 const label = _escape(this.getItemLabel(it) || '');
                 const secondary = _escape(this.getItemSecondary(it) || '');
                 return secondary ? `<div data-idx='${i}'><span>${label}</span><span>${secondary}</span></div>` : `<div data-idx='${i}'>${label}</div>`;
             }).join('');
-            this._activeIndex = 0;
+            // Re-index mapping still works because we use original i for data-idx; filtered keeps order.
         }
+        this._resultsBox.innerHTML = html;
+        // Active index is always first item (Add option) initially
+        this._activeIndex = 0;
         this._highlight();
         this._resultsBox.classList.remove('hidden');
     }
@@ -160,6 +171,7 @@ export class AutoCompleteBox extends HTMLElement {
         this._hideResults();
         this._results = [];
         this._activeIndex = -1;
+        if (this._timer) clearTimeout(this._timer);
     }
 
     _hideResults() {
