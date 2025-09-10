@@ -497,7 +497,7 @@ function renderTableField(node, wrapper, state) {
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.textContent = 'Add Row';
-    addBtn.className = 'add-row-btn';
+    addBtn.className = 'add-button';
     function addRow(values = {}) {
         const tr = document.createElement('tr');
         cols.forEach(col => {

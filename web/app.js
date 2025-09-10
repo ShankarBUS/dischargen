@@ -5,9 +5,18 @@ import { renderAST, reevaluateConditions, evaluateComputedAll, getFieldValueFrom
 import { renderPDF } from './js/pdf_renderer.js';
 
 const formContainer = document.getElementById('formContainer');
-const templateSelect = document.getElementById('templateSelect');
-const exportJsonBtn = document.getElementById('exportJsonBtn');
-const exportPdfBtn = document.getElementById('exportPdfBtn');
+const jsonBtn = document.getElementById('jsonBtn');
+const pdfBtn = document.getElementById('pdfBtn');
+const templatesBtn = document.getElementById('templatesBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+
+const jsonPreview = document.getElementById('jsonPreview');
+const copyJsonBtn = document.getElementById('copyJsonBtn');
+const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+const pdfPreviewBtn = document.getElementById('pdfPreviewBtn');
+const pdfPrintBtn = document.getElementById('pdfPrintBtn');
+const pdfDownloadBtn = document.getElementById('pdfDownloadBtn');
+const templatesTree = document.getElementById('templatesTree');
 
 // Lab report fetch helper (POST) – returns parsed JSON (or raw text if not JSON).
 // NOTE: Expose ticket & params via UI / config; do NOT hardcode secrets.
@@ -46,38 +55,63 @@ export async function fetchLabReport({
 
 const state = { meta: {}, ast: [], fieldRefs: {}, catalogsCache: {}, autosaveKey: 'discharge_autosave_v1', computed: [] };
 
+// ----- Theme handling -----
+const THEME_STORAGE_KEY = 'dischargen_theme_v1';
+const prefersDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: false, addEventListener: () => { } };
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  root.classList.remove('theme-dark', 'theme-light');
+  if (mode === 'dark') root.classList.add('theme-dark');
+  else if (mode === 'light') root.classList.add('theme-light');
+  else {
+    // system
+    if (prefersDark.matches) root.classList.add('theme-dark');
+    // else no explicit class to allow light defaults
+  }
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY) || 'system';
+  applyTheme(saved);
+  // reflect in settings modal radios
+  const radios = document.querySelectorAll('input[name="themeMode"]');
+  radios.forEach(r => { r.checked = (r.value === saved); });
+  if (prefersDark.addEventListener) {
+    prefersDark.addEventListener('change', () => {
+      const current = localStorage.getItem(THEME_STORAGE_KEY) || 'system';
+      if (current === 'system') applyTheme('system');
+    });
+  }
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.name === 'themeMode') {
+    const mode = e.target.value;
+    try { localStorage.setItem(THEME_STORAGE_KEY, mode); } catch { }
+    applyTheme(mode);
+  }
+});
+
 // Template registry handling
 let templateRegistry = [];
+let departments = [];
 async function loadTemplateRegistry() {
   try {
     const res = await fetch('templates/templates.json');
     templateRegistry = await res.json();
-    renderTemplateOptions();
+    // Load departments catalog (for tree grouping)
+    try {
+      const dres = await fetch('data/departments.json');
+      departments = await dres.json();
+    } catch { }
     // Auto load default template
     const def = templateRegistry.find(t => t.default) || templateRegistry[0];
-    if (def) {
-      templateSelect.value = def.id;
-      await loadTemplateById(def.id);
-    }
+    if (def) await loadTemplateById(def.id);
   } catch (e) {
     console.error('Failed to load template registry', e);
   }
 }
-
-function renderTemplateOptions() {
-  templateSelect.innerHTML = '';
-  templateRegistry.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = t.name || t.id;
-    templateSelect.appendChild(opt);
-  });
-}
-
-templateSelect?.addEventListener('change', async () => {
-  const id = templateSelect.value;
-  if (id) await loadTemplateById(id);
-});
 
 async function loadTemplateById(id) {
   const entry = templateRegistry.find(t => t.id === id);
@@ -110,8 +144,8 @@ async function loadTemplate(text) {
       console.groupEnd();
     }
   } catch (e) { console.error('Lint failed', e); }
-  await renderAST(formContainer, state);
-  try { updateLangBadge(state.meta); } catch {}
+  renderAST(formContainer, state);
+  try { updateLangBadge(state.meta); } catch { }
   restoreAutosave();
   reevaluateConditions(formContainer, state);
   evaluateComputedAll(state);
@@ -143,26 +177,145 @@ function collectData() {
   return obj;
 }
 
-exportJsonBtn.addEventListener('click', () => {
+jsonBtn.addEventListener('click', () => {
   if (!validateAll(formContainer)) { alert('Validation errors present'); return; }
   const data = collectData();
-  downloadFile('discharge.json', JSON.stringify(data, null, 2));
+  // Show JSON modal with content and offer copy/download
+  jsonPreview.value = JSON.stringify(data, null, 2);
+  openModal('jsonModal');
 });
 
-exportPdfBtn.addEventListener('click', async () => {
+pdfBtn.addEventListener('click', async () => {
   if (!validateAll(formContainer)) { alert('Validation errors present'); return; }
   const data = collectData();
   const meta = state.meta || {};
-  const docDefinition = await renderPDF(state.meta, state.ast, data);
-  const filename =  `${data.patient_pin}_discharge_summary.pdf`.replace(/[^a-z0-9._-]/gi, '_');
+  latestPdf = {
+    docDefinition: await renderPDF(state.meta, state.ast, data),
+    filename: `${data.patient_pin || 'patient'}_discharge_summary.pdf`.replace(/[^a-z0-9._-]/gi, '_')
+  };
   if (!globalThis.pdfMake) { alert('PDF engine not loaded'); return; }
-  globalThis.pdfMake.createPdf(docDefinition).open() //(filename);
+  openModal('pdfModal');
 });
 
 function downloadFile(filename, content) {
   const a = document.createElement('a');
   a.href = 'data:application/octet-stream,' + encodeURIComponent(content);
   a.download = filename; a.click();
+}
+
+// Modal helpers
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('hidden');
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-close]');
+  if (btn) {
+    closeModal(btn.getAttribute('data-close'));
+  }
+  // click outside to close
+  const modal = e.target.closest('.modal-content');
+  if (!modal && e.target.classList && e.target.classList.contains('modal')) {
+    e.target.classList.add('hidden');
+  }
+});
+
+copyJsonBtn?.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(jsonPreview.value);
+    alert('Copied to clipboard');
+  } catch { }
+});
+
+downloadJsonBtn?.addEventListener('click', () => {
+  downloadFile('discharge.json', jsonPreview.value || '{}');
+});
+
+let latestPdf = null;
+
+pdfPreviewBtn?.addEventListener('click', () => {
+  if (!latestPdf || !globalThis.pdfMake) return;
+  globalThis.pdfMake.createPdf(latestPdf.docDefinition).open();
+});
+
+pdfPrintBtn?.addEventListener('click', () => {
+  if (!latestPdf || !globalThis.pdfMake) return;
+  globalThis.pdfMake.createPdf(latestPdf.docDefinition).print();
+});
+
+pdfDownloadBtn?.addEventListener('click', () => {
+  if (!latestPdf || !globalThis.pdfMake) return;
+  globalThis.pdfMake.createPdf(latestPdf.docDefinition).download(latestPdf.filename);
+});
+
+settingsBtn?.addEventListener('click', () => openModal('settingsModal'));
+
+templatesBtn?.addEventListener('click', () => {
+  buildTemplatesTree();
+  openModal('templatesModal');
+});
+
+function buildTemplatesTree() {
+  if (!templatesTree) return;
+  // Build map deptId -> {label, items: []}
+  const deptById = new Map();
+  departments.forEach(d => deptById.set(d.id, { label: d.label, id: d.id }));
+  const buckets = new Map();
+  templateRegistry.forEach(t => {
+    const depId = t.department_id || 'uncat';
+    if (!buckets.has(depId)) {
+      const d = deptById.get(depId);
+      buckets.set(depId, { label: d ? d.label : 'Uncategorized', id: depId, items: [] });
+    }
+    buckets.get(depId).items.push(t);
+  });
+
+  // Render
+  templatesTree.innerHTML = '';
+  [...buckets.values()].sort((a, b) => a.label.localeCompare(b.label)).forEach(bucket => {
+    const section = document.createElement('div');
+    section.className = 'tree-section';
+    const h = document.createElement('div'); h.className = 'tree-section-title';
+    h.textContent = bucket.label;
+    section.appendChild(h);
+    const ul = document.createElement('ul');
+    ul.className = 'tree-list';
+    bucket.items.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'tree-item';
+      const name = document.createElement('span');
+      name.textContent = item.name || item.id;
+      name.className = 'tree-item-name';
+      const actions = document.createElement('span');
+      actions.className = 'tree-item-actions';
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'btn';
+      loadBtn.textContent = 'Load';
+      loadBtn.addEventListener('click', async () => { await loadTemplateById(item.id); closeModal('templatesModal'); });
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'btn';
+      dlBtn.textContent = 'Download';
+      dlBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch(`templates/${item.file}`);
+          const txt = await res.text();
+          downloadFile(item.file || (item.id + '.mctm'), txt);
+        } catch { }
+      });
+      actions.appendChild(loadBtn); actions.appendChild(dlBtn);
+      li.appendChild(name); li.appendChild(actions); ul.appendChild(li);
+    });
+    section.appendChild(ul);
+    templatesTree.appendChild(section);
+  });
 }
 
 // Autosave
@@ -200,5 +353,6 @@ function restoreAutosave() {
   } catch (e) { }
 }
 
+initTheme();
 // initial load via registry
 loadTemplateRegistry();
