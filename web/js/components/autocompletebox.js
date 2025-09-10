@@ -32,7 +32,8 @@ export class AutoCompleteBox extends HTMLElement {
         this._resultsBox.className = 'ac-results hidden';
 
         this.appendChild(this._input);
-        this.appendChild(this._resultsBox);
+        // NOTE: resultsBox will be portaled to <body> when shown to avoid clipping by overflow/stacking contexts.
+        this.appendChild(this._resultsBox); // kept for initial DOM (will be moved when needed)
 
         this.tabIndex = -1;
 
@@ -40,6 +41,10 @@ export class AutoCompleteBox extends HTMLElement {
         this._onKeyDown = this._onKeyDown.bind(this);
         this._onMouseDown = this._onMouseDown.bind(this);
         this._onFocus = this._onFocus.bind(this);
+        this._onDocumentClick = this._onDocumentClick.bind(this);
+        this._reposition = this._reposition.bind(this);
+
+        this._floating = false; // whether resultsBox is appended to body
     }
 
     connectedCallback() {
@@ -59,6 +64,11 @@ export class AutoCompleteBox extends HTMLElement {
         this._resultsBox.removeEventListener('mousedown', this._onMouseDown);
         this.removeEventListener('focus', this._onFocus);
         if (this._timer) clearTimeout(this._timer);
+        this._removeGlobalListeners();
+        // On disconnect, ensure detached floating panel is removed
+        if (this._floating && this._resultsBox.parentElement === document.body) {
+            document.body.removeChild(this._resultsBox);
+        }
     }
 
     attributeChangedCallback(name, oldVal, newVal) {
@@ -102,7 +112,7 @@ export class AutoCompleteBox extends HTMLElement {
     }
 
     // Render results list.
-    // pending=true => only show the Add option (custom entry) while fetch in progress.
+    // if the results are pending, then only show the Add option (custom entry) while fetch in progress.
     _renderResults(pending = false) {
         const q = this._lastQuery;
         if (!q) { this._hideResults(); return; }
@@ -122,7 +132,11 @@ export class AutoCompleteBox extends HTMLElement {
         // Active index is always first item (Add option) initially
         this._activeIndex = 0;
         this._highlight();
+        this._ensureFloating();
         this._resultsBox.classList.remove('hidden');
+        // Reposition after layout & after potential height change
+        this._reposition();
+        requestAnimationFrame(this._reposition); // second pass to catch height changes
     }
 
     _highlight() {
@@ -177,6 +191,78 @@ export class AutoCompleteBox extends HTMLElement {
     _hideResults() {
         this._resultsBox.classList.add('hidden');
         this._resultsBox.innerHTML = '';
+        this._removeGlobalListeners();
+    }
+
+    _ensureFloating() {
+        if (this._floating) return;
+        // Move results box to body to escape overflow/stacking contexts
+        document.body.appendChild(this._resultsBox);
+        this._resultsBox.classList.add('floating');
+        this._resultsBox.style.zIndex = '99999'; // ensure above most UI
+        this._resultsBox.style.minWidth = '120px';
+        this._floating = true;
+        this._addGlobalListeners();
+    }
+
+    _addGlobalListeners() {
+        if (this._listenersAdded) return;
+        window.addEventListener('scroll', this._reposition, true); // capture to catch nested scrolls
+        window.addEventListener('resize', this._reposition, true);
+        document.addEventListener('click', this._onDocumentClick, true);
+        this._listenersAdded = true;
+    }
+
+    _removeGlobalListeners() {
+        if (!this._listenersAdded) return;
+        window.removeEventListener('scroll', this._reposition, true);
+        window.removeEventListener('resize', this._reposition, true);
+        document.removeEventListener('click', this._onDocumentClick, true);
+        this._listenersAdded = false;
+    }
+
+    _onDocumentClick(e) {
+        if (this._resultsBox.classList.contains('hidden')) return;
+        if (this.contains(e.target) || this._resultsBox.contains(e.target)) return;
+        this._hideResults();
+    }
+
+    _reposition() {
+        if (this._resultsBox.classList.contains('hidden')) return;
+        const input = this._input;
+        if (!input || !document.body.contains(input)) return;
+        const rect = input.getBoundingClientRect();
+        const panel = this._resultsBox;
+        // base placement below input
+        const margin = panel.style.marginTop ? parseInt(panel.style.marginTop, 10) : 2;
+        panel.style.width = rect.width + 'px';
+        let left = Math.round(rect.left);
+        let top = Math.round(rect.bottom + margin);
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+        // After height, decide if needs to flip above
+        const panelRect = panel.getBoundingClientRect();
+        if (panelRect.bottom > window.innerHeight && (rect.top - margin - panelRect.height) > 0) {
+            // place above
+            top = Math.round(rect.top - margin - panelRect.height);
+            panel.style.top = top + 'px';
+        }
+
+        // Horizontal overflow adjustments
+        const overflowRight = (left + panelRect.width) - window.innerWidth;
+        if (overflowRight > 0) {
+            left = Math.max(4, left - overflowRight - 4);
+            panel.style.left = left + 'px';
+        }
+        if (left < 0) {
+            left = 4;
+            panel.style.left = left + 'px';
+        }
+
+        // If input scrolled off screen, hide
+        if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {
+            this._hideResults();
+        }
     }
 }
 

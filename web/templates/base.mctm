@@ -10,13 +10,6 @@ pdf_header: "Chief: Dr. Whatever Name"
 logo: logo.jpg
 ---
 
-1. List
-    - Sub
-    - Sub 2
-        1. Sub sub
-        2. Sub sub 2
-            - Sub sub sub 3
-
 > Demographics
 
 { "" id:demographics_columns layout:columns-2

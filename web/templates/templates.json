@@ -1,0 +1,9 @@
+[
+  {
+    "id": "base_template",
+    "department_id": "",
+    "name": "Base Template",
+    "file": "base.mctm",
+    "default": true
+  }
+]

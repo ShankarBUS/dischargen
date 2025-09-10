@@ -1,5 +1,6 @@
 import { icdSearchWithCache, snomedSearchWithCache } from './search_handler.js';
 import { AutoCompleteBox } from './components/autocompletebox.js';
+import { DataEditor } from './components/dataeditor.js';
 import { evaluateCondition } from './conditional.js';
 import { applyValidation } from './validation.js';
 import { parseMarkdown, escapeHtml } from './md_parser.js';
@@ -325,63 +326,45 @@ function renderField(node, state) {
 
 function renderComplaintsField(node, wrapper, state) {
     wrapper.classList.remove('inline');
-    const list = document.createElement('div');
-    list.className = 'complaints-wrapper';
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.textContent = 'Add Complaint';
-    addBtn.addEventListener('click', () => addEntry('', ''));
-    wrapper.appendChild(list);
-    wrapper.appendChild(addBtn);
+    const editor = new DataEditor();
+    editor.setAttribute('add-label', 'Add Complaint');
 
-    function addEntry(complaint, duration, unit = 'days') {
-        const row = document.createElement('div');
-        row.className = 'complaint-row';
-        const cAc = new AutoCompleteBox();
-        cAc.setAttribute('placeholder', node.placeholder || '');
-        cAc.value = complaint || '';
-        cAc.fetcher = snomedSearchWithCache;
-        cAc.getItemLabel = (item) => item || '';
-        const d = document.createElement('input');
-        d.type = 'number';
-        d.min = '1';
-        d.placeholder = 'Duration';
-        d.value = duration;
+    // Define columns: complaint (custom autocomplete), duration (number), unit (select)
+    editor.columns = [
+        {
+            key: 'complaint', label: 'Complaint', type: 'custom', placeholder: node.placeholder || 'Complaint', width: '50%',
+            createEditor: (rowIndex, col, value, commit) => {
+                const ac = new AutoCompleteBox();
+                ac.placeholder = col.placeholder || '';
+                ac.value = value || '';
+                ac.fetcher = snomedSearchWithCache;
+                ac.getItemLabel = (item) => item || '';
+                // Commit on selection / enter
+                ac.addEventListener('commit', e => commit(e.detail.value));
+                // Also commit while typing so data model stays in sync
+                ac.addEventListener('text-changed', () => commit(ac.value));
+                return ac;
+            },
+            getValue: (el) => el.value,
+            setValue: (el, v) => { el.value = v || ''; }
+        },
+        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'Duration' },
+        { key: 'unit', label: 'Unit', type: 'select', options: ['days', 'weeks', 'months', 'years'], default: 'days' }
+    ];
 
-        const u = document.createElement('select');
-        u.className = 'duration-unit';
-        const options = ['days', 'weeks', 'months', 'years'];
-        options.forEach(opt => {
-            const option = document.createElement('option');
-            option.value = opt;
-            option.textContent = opt;
-            u.appendChild(option);
-        });
-        u.value = options.includes(unit) ? unit : 'days';
-
-        const rm = document.createElement('button');
-        rm.type = 'button';
-        rm.className = 'remove-button';
-        rm.addEventListener('click', () => row.remove());
-        row.appendChild(cAc);
-        row.appendChild(d);
-        row.appendChild(u);
-        row.appendChild(rm);
-        list.appendChild(row);
-    }
+    wrapper.appendChild(editor);
 
     state.fieldRefs[node.id] = {
         get value() {
-            return [...list.querySelectorAll('.complaint-row')].map(r => {
-                const c = r.querySelector('auto-complete-box')?.value || '';
-                const d = r.querySelector('input[type=number]').value;
-                const u = r.querySelector('select.duration-unit').value;
-                return { complaint: c, duration: d, unit: u };
-            }).filter(e => e.complaint);
+            return (editor.items || []).map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }))
+                .filter(it => it.complaint);
         },
         set value(v) {
-            list.innerHTML = '';
-            if (Array.isArray(v)) v.forEach(e => addEntry(e.complaint || '', e.duration || '', e.unit || 'days'));
+            if (Array.isArray(v)) {
+                editor.items = v.map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }));
+            } else {
+                editor.items = [];
+            }
         }
     };
 }

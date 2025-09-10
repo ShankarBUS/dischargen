@@ -5,8 +5,7 @@ import { renderAST, reevaluateConditions, evaluateComputedAll, getFieldValueFrom
 import { renderPDF } from './js/pdf_renderer.js';
 
 const formContainer = document.getElementById('formContainer');
-const loadDefaultBtn = document.getElementById('loadDefaultTemplateBtn');
-const templateFileInput = document.getElementById('templateFileInput');
+const templateSelect = document.getElementById('templateSelect');
 const exportJsonBtn = document.getElementById('exportJsonBtn');
 const exportPdfBtn = document.getElementById('exportPdfBtn');
 
@@ -47,18 +46,52 @@ export async function fetchLabReport({
 
 const state = { meta: {}, ast: [], fieldRefs: {}, catalogsCache: {}, autosaveKey: 'discharge_autosave_v1', computed: [] };
 
-loadDefaultBtn.addEventListener('click', async () => {
-  const res = await fetch('templates/base.mctm');
-  const txt = await res.text();
-  loadTemplate(txt);
+// Template registry handling
+let templateRegistry = [];
+async function loadTemplateRegistry() {
+  try {
+    const res = await fetch('templates/templates.json');
+    templateRegistry = await res.json();
+    renderTemplateOptions();
+    // Auto load default template
+    const def = templateRegistry.find(t => t.default) || templateRegistry[0];
+    if (def) {
+      templateSelect.value = def.id;
+      await loadTemplateById(def.id);
+    }
+  } catch (e) {
+    console.error('Failed to load template registry', e);
+  }
+}
+
+function renderTemplateOptions() {
+  templateSelect.innerHTML = '';
+  templateRegistry.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name || t.id;
+    templateSelect.appendChild(opt);
+  });
+}
+
+templateSelect?.addEventListener('change', async () => {
+  const id = templateSelect.value;
+  if (id) await loadTemplateById(id);
 });
 
-templateFileInput.addEventListener('change', async e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const txt = await file.text();
-  loadTemplate(txt);
-});
+async function loadTemplateById(id) {
+  const entry = templateRegistry.find(t => t.id === id);
+  if (!entry) return;
+  try {
+    const path = `templates/${entry.file}`;
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = await res.text();
+    await loadTemplate(txt);
+  } catch (e) {
+    console.error('Failed to load template', id, e);
+  }
+}
 
 async function loadTemplate(text) {
   formContainer.innerHTML = '';
@@ -167,5 +200,5 @@ function restoreAutosave() {
   } catch (e) { }
 }
 
-// initial load
-loadDefaultBtn.click();
+// initial load via registry
+loadTemplateRegistry();
