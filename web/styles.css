@@ -447,7 +447,7 @@ textarea {
     resize: vertical;
 }
 
-input:not([type=radio]):focus,
+input:not([type=radio], [type=checkbox]):focus,
 textarea:focus,
 select:focus {
     outline: none;
@@ -916,7 +916,8 @@ button {
     font-weight: 600;
 }
 
-.modal h2, .modal p {
+.modal h2,
+.modal p {
     margin: 0;
 }
 
@@ -937,13 +938,20 @@ button {
 }
 
 /* Tree */
+.tree {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
 .tree-section {
-    margin-bottom: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
 }
 
 .tree-section-title {
     font-weight: 600;
-    margin-bottom: var(--space-2);
 }
 
 .tree-list {

@@ -297,12 +297,22 @@ function buildTemplatesTree() {
       const actions = document.createElement('span');
       actions.className = 'tree-item-actions';
       const loadBtn = document.createElement('button');
-      loadBtn.className = 'btn';
-      loadBtn.textContent = 'Load';
+      loadBtn.className = 'icon-button';
+      loadBtn.title = 'Load Template';
+      loadBtn.innerHTML =
+        `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24">
+          <path fill="currentColor"
+            d="M18.5 20a.5.5 0 0 1-.5.5h-5.732A6.5 6.5 0 0 1 11.19 22H18a2 2 0 0 0 2-2V9.828a2 2 0 0 0-.586-1.414l-5.829-5.828l-.049-.04l-.036-.03a2 2 0 0 0-.219-.18a1 1 0 0 0-.08-.044l-.048-.024l-.05-.029c-.054-.031-.109-.063-.166-.087a2 2 0 0 0-.624-.138q-.03-.002-.059-.007L12.172 2H6a2 2 0 0 0-2 2v7.498a6.5 6.5 0 0 1 1.5-.422V4a.5.5 0 0 1 .5-.5h6V8a2 2 0 0 0 2 2h4.5zm-5-15.379L17.378 8.5H14a.5.5 0 0 1-.5-.5z"/><path d="M12 17.5a5.5 5.5 0 1 1-11 0a5.5 5.5 0 0 1 11 0m-2.146-2.354a.5.5 0 0 0-.708 0L5.5 18.793l-1.646-1.647a.5.5 0 0 0-.708.708l2 2a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708"/>
+        </svg>`;
       loadBtn.addEventListener('click', async () => { await loadTemplateById(item.id); closeModal('templatesModal'); });
       const dlBtn = document.createElement('button');
-      dlBtn.className = 'btn';
-      dlBtn.textContent = 'Download';
+      dlBtn.className = 'icon-button';
+      dlBtn.title = 'Download Template';
+      dlBtn.innerHTML =
+        `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24">
+          <path fill="currentColor"
+            d="M6 2a2 2 0 0 0-2 2v7.498a6.5 6.5 0 0 1 1.5-.422V4a.5.5 0 0 1 .5-.5h6V8a2 2 0 0 0 2 2h4.5v10a.5.5 0 0 1-.5.5h-5.732A6.5 6.5 0 0 1 11.19 22H18a2 2 0 0 0 2-2V9.828a2 2 0 0 0-.586-1.414l-5.828-5.828A2 2 0 0 0 12.172 2zm11.38 6.5H14a.5.5 0 0 1-.5-.5V4.62zm-5.38 9a5.5 5.5 0 1 1-11 0a5.5 5.5 0 0 1 11 0m-5-3a.5.5 0 0 0-1 0v4.793l-1.646-1.647a.5.5 0 0 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l2.5-2.5a.5.5 0 0 0-.708-.708L7 19.293z" />
+        </svg>`;
       dlBtn.addEventListener('click', async () => {
         try {
           const res = await fetch(`templates/${item.file}`);
