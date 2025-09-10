@@ -35,7 +35,6 @@ export function renderAST(root, state) {
                         checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
                         checkbox.className = 'section-optional-checkbox';
-                        // Preserve prior state if re-rendering; fall back to node.default (or checked by default)
                         const prev = node.id && state.sectionOptionals[node.id];
                         const initial = (prev ? prev.checked : (node.default === false ? false : true));
                         checkbox.checked = initial;
@@ -94,6 +93,7 @@ function registerHiddenUIField(node, state) {
     if (!node || !node.id) return;
     if (state.fieldRefs[node.id]) return;
     state.fieldRefs[node.id] = { value: node.default !== undefined ? node.default : '' };
+    if (node.fieldType === 'computed') state.computed.push(node);
 }
 
 function renderGroup(node, state, renderNodes) {
@@ -385,8 +385,13 @@ function renderDiagnosisField(node, wrapper, state) {
 
     function renderTags() {
         tagList.innerHTML = '';
+        if (state.diagnosis.length === 0) {
+            tagList.style.display = 'none';
+            return;
+        }
+
         state.diagnosis.forEach((entry, idx) => {
-            const tag = document.createElement('span');
+            const tag = document.createElement('div');
             tag.className = 'tag';
             tag.textContent = `${entry.description}` + (entry.code ? ` (${entry.code})` : '');
             const btn = document.createElement('button');
@@ -399,6 +404,7 @@ function renderDiagnosisField(node, wrapper, state) {
             tag.appendChild(btn);
             tagList.appendChild(tag);
         });
+        tagList.style.display = 'flex';
     }
 
     ac.addEventListener('commit', (e) => {

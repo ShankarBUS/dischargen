@@ -184,7 +184,7 @@
 
 html,
 body {
-    height: 100%;
+    min-height: 100%;
 }
 
 body {
@@ -220,9 +220,8 @@ main {
 
 /* Header */
 header {
-    position: static;
-    /* persistent, not sticky */
-    top: auto;
+    position: sticky;
+    top: 0;
     z-index: var(--z-header);
     display: flex;
     flex-wrap: wrap;
@@ -447,7 +446,7 @@ textarea {
     resize: vertical;
 }
 
-input:not([type=radio], [type=checkbox]):focus,
+input:focus,
 textarea:focus,
 select:focus {
     outline: none;
@@ -924,6 +923,9 @@ button {
 .modal-body {
     padding: var(--space-4);
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
 }
 
 .modal-close {
@@ -982,10 +984,12 @@ button {
     gap: var(--space-2);
 }
 
+/* Fieldset */
 fieldset {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-3);
+    border: 1px solid var(--c-border-strong);
     border-radius: var(--radius-md);
 }
 
@@ -994,8 +998,139 @@ fieldset legend {
     padding: 0 var(--space-2);
 }
 
-fieldset label {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
+/* Radio */
+input[type=radio] {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    vertical-align: top;
+    position: relative;
+    margin: 0;
+    cursor: pointer;
+    border: 1px solid var(--c-border-strong);
+    background: transparent;
+    border-radius: 100%;
+    transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+input[type=radio]:checked {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+}
+
+input[type=radio]:disabled {
+    background-color: var(--c-border);
+    cursor: not-allowed;
+    opacity: 0.9;
+}
+
+input[type=radio]:disabled:checked {
+    background-color: var(--c-border);
+    border-color: var(--c-border);
+}
+
+input[type=radio]:hover:not(:checked):not(:disabled) {
+    border-color: var(--c-accent);
+}
+
+input[type=radio]+label {
+    display: inline-block;
+    vertical-align: middle;
+    cursor: pointer;
+    margin-left: 4px;
+}
+
+input[type=radio]:disabled+label {
+    cursor: not-allowed;
+}
+
+input[type=radio]::after {
+    content: "";
+    display: block;
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 100%;
+    left: 5px;
+    top: 5px;
+    transform: scale(2);
+    opacity: 0;
+    background: var(--c-surface);
+    transition: transform var(--t-slow) ease, opacity var(--t-fast) ease;
+}
+
+input[type=radio]:checked::after {
+    transform: scale(1);
+    opacity: 1;
+}
+
+/* Checkbox */
+input[type=checkbox] {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    vertical-align: top;
+    position: relative;
+    margin: 0;
+    cursor: pointer;
+    border: 1px solid var(--c-border-strong);
+    background: transparent;
+    transition: background 0.3s, border-color 0.3s, box-shadow 0.2s;
+    border-radius: var(--radius-md);
+}
+
+input[type=checkbox]:checked {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+}
+
+input[type=checkbox]:disabled {
+    background-color: var(--c-border);
+    cursor: not-allowed;
+    opacity: 0.9;
+}
+
+input[type=checkbox]:disabled:checked {
+    background-color: var(--c-border);
+    border-color: var(--c-border);
+}
+
+input[type=checkbox]:hover:not(:checked):not(:disabled) {
+    border-color: var(--c-accent);
+}
+
+input[type=checkbox]:active:not(:checked):not(:disabled) {
+    background-color: var(--c-accent-soft);
+}
+
+input[type=checkbox]+label {
+    display: inline-block;
+    vertical-align: middle;
+    cursor: pointer;
+    margin-left: 4px;
+}
+
+input[type=checkbox]:disabled+label {
+    cursor: not-allowed;
+}
+
+input[type=checkbox]::after {
+    content: "";
+    display: block;
+    position: absolute;
+    width: 5px;
+    height: 10px;
+    border: 2px solid var(--c-surface);
+    border-top: 0;
+    border-left: 0;
+    left: 7px;
+    top: 4px;
+    transform: rotate(45deg);
+    opacity: 0;
+    transition: transform 0.3s cubic-bezier(.2, .85, .32, 1.2), opacity 0.2s;
+}
+
+input[type=checkbox]:checked::after {
+    opacity: 1;
+    transform: rotate(45deg);
 }

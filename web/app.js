@@ -76,7 +76,15 @@ function initTheme() {
   applyTheme(saved);
   // reflect in settings modal radios
   const radios = document.querySelectorAll('input[name="themeMode"]');
-  radios.forEach(r => { r.checked = (r.value === saved); });
+  radios.forEach(r => {
+    r.checked = (r.value === saved);
+    r.addEventListener('change', () => {
+      if (r.checked) {
+        try { localStorage.setItem(THEME_STORAGE_KEY, r.value); } catch { }
+        applyTheme(r.value);
+      }
+    })
+  });
   if (prefersDark.addEventListener) {
     prefersDark.addEventListener('change', () => {
       const current = localStorage.getItem(THEME_STORAGE_KEY) || 'system';
@@ -84,14 +92,6 @@ function initTheme() {
     });
   }
 }
-
-document.addEventListener('change', (e) => {
-  if (e.target && e.target.name === 'themeMode') {
-    const mode = e.target.value;
-    try { localStorage.setItem(THEME_STORAGE_KEY, mode); } catch { }
-    applyTheme(mode);
-  }
-});
 
 // Template registry handling
 let templateRegistry = [];
@@ -301,8 +301,10 @@ function buildTemplatesTree() {
       loadBtn.title = 'Load Template';
       loadBtn.innerHTML =
         `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24">
-          <path fill="currentColor"
-            d="M18.5 20a.5.5 0 0 1-.5.5h-5.732A6.5 6.5 0 0 1 11.19 22H18a2 2 0 0 0 2-2V9.828a2 2 0 0 0-.586-1.414l-5.829-5.828l-.049-.04l-.036-.03a2 2 0 0 0-.219-.18a1 1 0 0 0-.08-.044l-.048-.024l-.05-.029c-.054-.031-.109-.063-.166-.087a2 2 0 0 0-.624-.138q-.03-.002-.059-.007L12.172 2H6a2 2 0 0 0-2 2v7.498a6.5 6.5 0 0 1 1.5-.422V4a.5.5 0 0 1 .5-.5h6V8a2 2 0 0 0 2 2h4.5zm-5-15.379L17.378 8.5H14a.5.5 0 0 1-.5-.5z"/><path d="M12 17.5a5.5 5.5 0 1 1-11 0a5.5 5.5 0 0 1 11 0m-2.146-2.354a.5.5 0 0 0-.708 0L5.5 18.793l-1.646-1.647a.5.5 0 0 0-.708.708l2 2a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708"/>
+          <g fill="currentColor">
+            <path d="M18.5 20a.5.5 0 0 1-.5.5h-5.732A6.5 6.5 0 0 1 11.19 22H18a2 2 0 0 0 2-2V9.828a2 2 0 0 0-.586-1.414l-5.829-5.828l-.049-.04l-.036-.03a2 2 0 0 0-.219-.18a1 1 0 0 0-.08-.044l-.048-.024l-.05-.029c-.054-.031-.109-.063-.166-.087a2 2 0 0 0-.624-.138q-.03-.002-.059-.007L12.172 2H6a2 2 0 0 0-2 2v7.498a6.5 6.5 0 0 1 1.5-.422V4a.5.5 0 0 1 .5-.5h6V8a2 2 0 0 0 2 2h4.5zm-5-15.379L17.378 8.5H14a.5.5 0 0 1-.5-.5z"/>
+            <path d="M12 17.5a5.5 5.5 0 1 1-11 0a5.5 5.5 0 0 1 11 0m-2.146-2.354a.5.5 0 0 0-.708 0L5.5 18.793l-1.646-1.647a.5.5 0 0 0-.708.708l2 2a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708"/>
+          </g>
         </svg>`;
       loadBtn.addEventListener('click', async () => { await loadTemplateById(item.id); closeModal('templatesModal'); });
       const dlBtn = document.createElement('button');
