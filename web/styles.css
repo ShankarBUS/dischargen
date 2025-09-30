@@ -374,7 +374,7 @@ footer {
     display: flex;
     flex-wrap: wrap;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .group .group-body.layout-columns {
@@ -775,6 +775,19 @@ button[disabled] {
 
 .data-editor .data-table tr td {
     vertical-align: middle;
+}
+
+.data-editor-quickadd {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.comorbidities-editor {
+    border: 1px solid var(--c-border);
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
 }
 
 /* Scrollbars (webkit + firefox color hint) */

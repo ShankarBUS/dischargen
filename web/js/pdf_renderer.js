@@ -1,5 +1,6 @@
 import { evaluateCondition } from './conditional.js';
 import { parseMarkdown } from './md_parser.js';
+import { getDefaultComorbidities } from './defaults.js';
 
 let fontsLoaded = false;
 
@@ -67,7 +68,8 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
     if (!nodeVisible(node) || node.type !== 'field') return [];
     if (node.fieldType === 'static') {
       const md = String(node.content || '').trim();
-      if (!md) return []; return markdownAstToPdfBlocks(parseMarkdown(md));
+      if (!md) return [];
+      return markdownAstToPdfBlocks(parseMarkdown(md));
     }
     if (node.fieldType === 'table') {
       const tableVal = (getValue(node.id) || []);
@@ -86,13 +88,49 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
       return arr;
     }
     if (node.fieldType === 'text' && node.multiline) {
-      const val = String(getValue(node.id) || '').trim(); if (!val) return [];
+      const val = String(getValue(node.id) || '').trim();
+      if (!val) return [];
       const arr = [];
       if (node.label) arr.push(
         { text: toRunsWithFonts(node.label + ':'), style: 'sectionLabel', margin: [0, 6, 0, 2] });
-      arr.push(...markdownAstToPdfBlocks(parseMarkdown(val))); return arr;
+      arr.push(...markdownAstToPdfBlocks(parseMarkdown(val)));
+      return arr;
     }
-    const line = buildFieldLine(node, getValue(node.id)); if (!line) return [];
+    if (node.fieldType === 'complaints') {
+      const val = getValue(node.id);
+      const arr = Array.isArray(val) ? val : [];
+      const items = arr.map(o => {
+        if (!o || !o.complaint) return null;
+        const dur = o.duration ? `× ${o.duration}${o.unit ? ' ' + o.unit : ''}` : '';
+        return `${o.complaint}${dur ? ' ' + dur : ''}`.trim();
+      }).filter(Boolean);
+      if (!items.length) return [];
+      const blocks = [];
+      if (node.label) blocks.push({ text: toRunsWithFonts(node.label + ':'), style: 'sectionLabel', margin: [0, 6, 0, 2] });
+      blocks.push({ ul: items.map(t => ({ text: toRunsWithFonts(t) })), margin: [0, 0, 0, 4] });
+      return blocks;
+    }
+    if (node.fieldType === 'comorbidities') {
+      const val = getValue(node.id);
+      const arr = Array.isArray(val) ? val.filter(o => o && o.comorbidity) : [];
+      if (!arr.length) return [];
+      const known = getDefaultComorbidities();
+      const presentLower = new Set(arr.map(o => o.comorbidity.toLowerCase()));
+      const items = arr.map(o => {
+        const dur = o.duration ? `× ${o.duration} ${o.unit || ''}`.replace(/\s+/g, ' ').trim() : '';
+        const trx = o.treatment ? `- ${o.treatment}` : '';
+        return `K/C/O ${o.comorbidity} ${dur} ${trx}`.replace(/\s+/g, ' ').trim();
+      });
+      const negatives = known.filter(k => !presentLower.has(k.toLowerCase()));
+      if (negatives.length) items.push(`N/K/C/O ${negatives.join('/')}`);
+      const blocks = [];
+      if (node.label) blocks.push({ text: toRunsWithFonts(node.label + ':'), style: 'sectionLabel', margin: [0, 6, 0, 2] });
+      blocks.push({ ul: items.map(t => ({ text: toRunsWithFonts(t) })), margin: [0, 0, 0, 4] });
+      return blocks;
+    }
+
+    const line = buildFieldLine(node, getValue(node.id));
+    if (!line) return [];
     return [{ text: toRunsWithFonts(line), margin: [0, 0, 0, 4] }];
   };
 
@@ -216,15 +254,6 @@ function buildFieldLine(node, val) {
     case 'diagnosis': {
       const arr = Array.isArray(val) ? val : [];
       text = arr.map(o => (o && (o.description || o.label || o.name)) + (o && o.code ? ` (${o.code})` : '')).filter(Boolean).join('; ');
-      break;
-    }
-    case 'complaints': {
-      const arr = Array.isArray(val) ? val : [];
-      text = arr.map(o => {
-        if (!o || !o.complaint) return '';
-        const dur = o.duration ? ` × ${o.duration}${o.unit ? ' ' + o.unit : ''}` : '';
-        return `${o.complaint}${dur}`;
-      }).filter(Boolean).join('; ');
       break;
     }
     case 'list': {

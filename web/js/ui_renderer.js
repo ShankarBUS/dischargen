@@ -4,6 +4,7 @@ import { DataEditor } from './components/dataeditor.js';
 import { evaluateCondition } from './conditional.js';
 import { applyValidation } from './validation.js';
 import { parseMarkdown, escapeHtml } from './md_parser.js';
+import { getDefaultComorbidities } from './defaults.js';
 
 export function renderAST(root, state) {
     // Recursively render nodes. renderUI flag controls DOM creation; ui:hidden nodes still register values.
@@ -178,30 +179,9 @@ function renderField(node, state) {
     } else if (node.fieldType === 'hidden') {
         renderHiddenInput(node, wrapper, state);
     }
-    // else if (node.fieldType === 'image') {
-    //     const label = document.createElement('label'); label.textContent = node.label || node.id; wrapper.appendChild(label);
-    //     const holder = document.createElement('div'); holder.className = 'field-input';
-    //     const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; if (node.mode === 'capture') input.setAttribute('capture', 'environment');
-    //     const preview = document.createElement('img'); preview.style.maxWidth = '150px'; preview.style.display = 'none';
-    //     input.addEventListener('change', () => { const file = input.files && input.files[0]; if (!file) return; const maxKB = parseInt(node.maxSizeKB || '0', 10); const reader = new FileReader(); reader.onload = () => { let dataUrl = reader.result; if (maxKB && dataUrl.length / 1024 > maxKB) { alert('Image exceeds max size'); return; } preview.src = dataUrl; preview.style.display = 'block'; state.fieldRefs[node.id]._data = { name: file.name, dataUrl }; }; reader.readAsDataURL(file); });
-    //     holder.appendChild(input); holder.appendChild(preview); wrapper.appendChild(holder);
-    //     state.fieldRefs[node.id] = { _data: null, get value() { return this._data; } };
-    // }
-    //  else if (node.fieldType === 'comorbidities') {
-    //     // Checkboxes with duration and treatment
-    //     wrapper.classList.remove('inline');
-    //     const title = document.createElement('label'); title.textContent = node.label || 'Comorbidities'; wrapper.appendChild(title);
-    //     const holder = document.createElement('div'); holder.className = 'field-input';
-    //     const list = (node.items || 'diabetes,hypertension,TB,asthma,CAD,CKD,DCLD,Epilepsy,thyroid').split(',').map(s => s.trim()).filter(Boolean);
-    //     list.forEach(name => {
-    //         const row = document.createElement('div'); row.className = 'combo-row';
-    //         const id = `${node.id}_${name}`;
-    //         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = id; cb.name = id; const lbl = document.createElement('label'); lbl.textContent = name; lbl.htmlFor = id; const dur = document.createElement('input'); dur.type = 'text'; dur.placeholder = 'Duration'; dur.className = 'small'; const tx = document.createElement('input'); tx.type = 'text'; tx.placeholder = 'Treatment'; tx.className = 'small';
-    //         row.appendChild(cb); row.appendChild(lbl); row.appendChild(dur); row.appendChild(tx); holder.appendChild(row);
-    //     });
-    //     wrapper.appendChild(holder);
-    //     state.fieldRefs[node.id] = { get value() { return [...holder.querySelectorAll('.combo-row')].filter(r => r.querySelector('input[type=checkbox]').checked).map(r => ({ name: r.querySelector('label').textContent, duration: r.querySelector('input[placeholder=Duration]').value, treatment: r.querySelector('input[placeholder=Treatment]').value })); } };
-    // } else if (node.fieldType === 'personal-history') {
+    else if (node.fieldType === 'comorbidities') {
+        renderComorbiditiesField(node, wrapper, state);
+    } // else if (node.fieldType === 'personal-history') {
     //     wrapper.classList.remove('inline');
     //     const title = document.createElement('label'); title.textContent = node.label || 'Personal History'; wrapper.appendChild(title);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
@@ -426,6 +406,40 @@ function renderDiagnosisField(node, wrapper, state) {
         set value(v) {
             state.diagnosis = Array.isArray(v) ? v : [];
             renderTags();
+        }
+    };
+}
+
+function renderComorbiditiesField(node, wrapper, state) {
+    wrapper.classList.remove('inline');
+    const knownList = getDefaultComorbidities();
+    const editor = new DataEditor();
+    editor.classList.add('comorbidities-editor');
+    editor.setAttribute('add-label', 'Add Comorbidity');
+    editor.columns = [
+        { key: 'comorbidity', label: 'Comorbidity', type: 'text', placeholder: 'e.g. Diabetes Mellitus', width: '35%' },
+        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'e.g. 5', width: '15%' },
+        { key: 'unit', label: 'Unit', type: 'select', options: ['years', 'months', 'weeks', 'days'], default: 'years', width: '15%' },
+        { key: 'treatment', label: 'Treatment', type: 'text', placeholder: 'e.g. Metformin', width: '35%' }
+    ];
+    editor.quickAdd = {
+        items: knownList,
+        onAdd: (name) => ({ comorbidity: name, duration: '', unit: 'years', treatment: '' }),
+        matchItem: (items, name) => items.some(it => (it.comorbidity || '').toLowerCase() === name.toLowerCase())
+    };
+
+    wrapper.appendChild(editor);
+
+    state.fieldRefs[node.id] = {
+        get value() { return (editor.items || []).filter(it => it.comorbidity); },
+        set value(v) {
+            if (Array.isArray(v)) {
+                const mapped = v.map(it => {
+                    if (typeof it === 'string') return { comorbidity: it, duration: '', unit: 'years', treatment: '' };
+                    return { comorbidity: it.comorbidity || it.name || '', duration: it.duration || '', unit: it.unit || 'years', treatment: it.treatment || '' };
+                }).filter(it => it.comorbidity);
+                editor.items = mapped;
+            } else { editor.items = []; }
         }
     };
 }

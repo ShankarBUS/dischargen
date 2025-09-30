@@ -46,7 +46,7 @@ logo: logo.jpg
 
 > "Past History"
 
-@table id:ph columns:"[DM, HTN, TB, BA]" @
+@comorbidities id:comorbidities label:Comorbs @
 
 > "Menstrual History" if:patient_sex==Female
 
@@ -70,3 +70,5 @@ logo: logo.jpg
 > "Opinions Obtained" optional
 
 @table id:opinions columns:"[Date, Department, Impression, Advice]" @
+
+@text id:temp label:"Temp" placeholder:"Temp placeholder" default:"Default" @

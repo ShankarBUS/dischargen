@@ -129,7 +129,6 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 | list | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | Simple repeating free-text list |
 | complaints | id | label, required, default, if, pdf.hidden, ui.hidden | Complaints widget |
 | diagnosis | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | ICD search/entry |
-| image | id | label, mode, maxSizeKB, if, pdf.hidden, ui.hidden | Image capture/upload |
 | static | (none) | if, pdf.hidden, ui.hidden | Body preserved as `content` |
 | computed | id, formula | label, format, if, pdf.hidden, ui.hidden | Expression evaluated at runtime |
 | hidden | id | default, pdf.hidden (implicit), ui.hidden | Hidden value (always omitted from PDF) |
@@ -387,7 +386,6 @@ Applies only to female patients.
 - list: free-text list; typically rendered as delimited string.
 - complaints: complaint + duration/unit entries.
 - diagnosis: ICD or free-text diagnosis entries.
-- image: image capture/upload; `mode` and `maxSizeKB` MAY constrain capture.
 - static: display-only text; body preserved as-is.
 - computed: expression-derived value; not user-editable.
 - hidden: non-UI value; always omitted from PDF.

@@ -33,6 +33,7 @@ export class DataEditor extends HTMLElement {
     super();
     this._columns = [];
     this._items = [];
+    this._quickAddCfg = null; // holds quick-add configuration
     this._table = document.createElement('table');
     this._table.className = 'data-table';
     this._thead = document.createElement('thead');
@@ -53,6 +54,17 @@ export class DataEditor extends HTMLElement {
     this._addBtn.textContent = this.getAttribute('add-label') || 'Add';
     this._addBtn.addEventListener('click', () => this.addItem());
     this.appendChild(this._addBtn);
+
+    // Quick-add container (optional)
+    this._quickAddHost = document.createElement('div');
+    this._quickAddHost.className = 'data-editor-quickadd';
+    this.insertBefore(this._quickAddHost, wrap);
+
+    // Drag & drop state
+    this._dragIndex = null;
+    this._dropTargetIndex = null;
+    this._installDnD();
+    this._ensureDnDStyles();
   }
 
   // Public API
@@ -71,6 +83,16 @@ export class DataEditor extends HTMLElement {
     this._items = arr.map(it => this._withDefaults(it));
     this._renderBody();
     this._emitChange();
+  }
+
+  // Quick add API
+  // Accepts either an array of strings or an object: { items:[], matchItem(fn), onAdd(fn) }
+  get quickAdd() { return this._quickAddCfg; }
+  set quickAdd(cfg) {
+    // Normalize
+    if (Array.isArray(cfg)) cfg = { items: cfg };
+    this._quickAddCfg = cfg || null;
+    this._renderQuickAdd();
   }
 
   get value() { return this.items; }
@@ -122,6 +144,10 @@ export class DataEditor extends HTMLElement {
 
   _renderHeader() {
     const tr = document.createElement('tr');
+    // Drag handle column (blank header)
+    const thDrag = document.createElement('th');
+    thDrag.className = 'drag-col';
+    tr.appendChild(thDrag);
     this._columns.forEach(col => {
       const th = document.createElement('th');
       th.textContent = col.label || col.key;
@@ -135,6 +161,34 @@ export class DataEditor extends HTMLElement {
     this._thead.appendChild(tr);
   }
 
+  _renderQuickAdd() {
+    this._quickAddHost.innerHTML = '';
+    const cfg = this._quickAddCfg;
+    if (!cfg) return;
+    const items = Array.isArray(cfg.items) ? cfg.items : [];
+    if (!items.length) return;
+    items.forEach(name => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = name;
+      btn.addEventListener('click', () => {
+        const current = this.items;
+        const duplicate = typeof cfg.matchItem === 'function'
+          ? cfg.matchItem(current, name)
+          : current.some(it => Object.values(it).some(v => (v || '').toString().toLowerCase() === name.toLowerCase()));
+        if (duplicate) return;
+        let obj;
+        if (typeof cfg.onAdd === 'function') obj = cfg.onAdd(name);
+        else {
+          const key = (this._columns[0] && this._columns[0].key) || 'value';
+          obj = { [key]: name };
+        }
+        this.addItem(obj || {});
+      });
+      this._quickAddHost.appendChild(btn);
+    });
+  }
+
   _renderBody() {
     this._tbody.innerHTML = '';
     this._items.forEach((item, idx) => this._appendRow(idx, item));
@@ -142,6 +196,19 @@ export class DataEditor extends HTMLElement {
 
   _appendRow(rowIndex, item) {
     const tr = document.createElement('tr');
+    tr.dataset.index = String(rowIndex);
+    tr.draggable = true; // entire row draggable
+
+    // Drag handle cell
+    const tdHandle = document.createElement('td');
+    tdHandle.className = 'drag-handle-cell';
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.setAttribute('aria-label', 'Drag to reorder');
+    handle.textContent = '⋮⋮';
+    tdHandle.appendChild(handle);
+    tr.appendChild(tdHandle);
+
     this._columns.forEach(col => {
       const td = document.createElement('td');
       const editor = this._createEditor(col, item[col.key], v => {
@@ -251,6 +318,81 @@ export class DataEditor extends HTMLElement {
   _emitChange() {
     // Emit shallow copy to avoid external direct mutation without going through API
     this.dispatchEvent(new CustomEvent('items-changed', { detail: { items: this.items }, bubbles: true }));
+  }
+
+  // --- Drag & Drop Implementation ---
+  _installDnD() {
+    // Use event delegation on tbody
+    this._tbody.addEventListener('dragstart', e => {
+      const tr = e.target.closest('tr');
+      if (!tr || tr.parentElement !== this._tbody) return;
+      this._dragIndex = Array.from(this._tbody.children).indexOf(tr);
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(this._dragIndex)); } catch { }
+      tr.classList.add('dragging');
+    });
+    this._tbody.addEventListener('dragend', () => {
+      this._clearDragVisuals();
+      this._dragIndex = null;
+      this._dropTargetIndex = null;
+    });
+    this._tbody.addEventListener('dragover', e => {
+      if (this._dragIndex == null) return;
+      e.preventDefault();
+      const tr = e.target.closest('tr');
+      if (!tr || tr.parentElement !== this._tbody) return;
+      const rect = tr.getBoundingClientRect();
+      const overIndex = Array.from(this._tbody.children).indexOf(tr);
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      // Compute insertion index semantics: dropTargetIndex is where item will be inserted
+      let insertionIndex = overIndex + (before ? 0 : 1);
+      if (insertionIndex === this._dragIndex || insertionIndex === this._dragIndex + 1) {
+        // No movement; just clear visuals to reduce flicker
+        this._clearDragVisuals();
+        return;
+      }
+      this._dropTargetIndex = insertionIndex;
+      this._clearDragVisuals();
+      tr.classList.add(before ? 'drag-over-before' : 'drag-over-after');
+    });
+    this._tbody.addEventListener('drop', e => {
+      if (this._dragIndex == null || this._dropTargetIndex == null) return;
+      e.preventDefault();
+      let from = this._dragIndex;
+      let to = this._dropTargetIndex;
+      if (to > this._items.length) to = this._items.length;
+      if (to > from) to--; // adjust for removal
+      if (from !== to) {
+        const moved = this._items.splice(from, 1)[0];
+        this._items.splice(to, 0, moved);
+        this._renderBody();
+        this._emitChange();
+      }
+      this._clearDragVisuals();
+      this._dragIndex = null;
+      this._dropTargetIndex = null;
+    });
+  }
+
+  _clearDragVisuals() {
+    Array.from(this._tbody.querySelectorAll('.drag-over-before, .drag-over-after, .dragging')).forEach(tr => {
+      tr.classList.remove('drag-over-before', 'drag-over-after', 'dragging');
+    });
+  }
+
+  _ensureDnDStyles() {
+    if (document.getElementById('data-editor-dnd-style')) return;
+    const style = document.createElement('style');
+    style.id = 'data-editor-dnd-style';
+    style.textContent = `
+      .data-editor .drag-handle { cursor: grab; user-select: none; font-size: 14px; line-height: 1; display:inline-block; padding:2px 4px; }
+      .data-editor tr.dragging { opacity: 0.5; }
+      .data-editor tr.drag-over-before { box-shadow: 0 -3px 0 #1a73e8 inset; }
+      .data-editor tr.drag-over-after { box-shadow: 0 3px 0 #1a73e8 inset; }
+      .data-editor .drag-handle-cell { width: 24px; text-align: center; }
+      .data-editor th.drag-col { width:24px; }
+    `;
+    document.head.appendChild(style);
   }
 }
 
