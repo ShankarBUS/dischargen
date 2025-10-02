@@ -4,7 +4,7 @@ import { DataEditor } from './components/dataeditor.js';
 import { evaluateCondition } from './conditional.js';
 import { applyValidation } from './validation.js';
 import { parseMarkdown, escapeHtml } from './md_parser.js';
-import { getDefaultComorbidities } from './defaults.js';
+import { getKnownChronicDiseases, getKnownPastEvents } from './defaults.js';
 
 export function renderAST(root, state) {
     // Recursively render nodes. renderUI flag controls DOM creation; ui:hidden nodes still register values.
@@ -137,7 +137,7 @@ function renderGroup(node, state, renderNodes) {
 
 function renderField(node, state) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'form-row inline';
+    wrapper.className = 'form-row';
     wrapper.dataset.fieldId = node.id;
     if (node.if) wrapper.dataset.condition = node.if;
     if (node.label) {
@@ -163,7 +163,6 @@ function renderField(node, state) {
     } else if (node.fieldType === 'list') {
         renderListField(node, wrapper, state);
     } else if (node.fieldType === 'static') {
-        wrapper.classList.remove('inline');
         wrapper.classList.add('static-block');
         const div = document.createElement('div');
         div.innerHTML = renderMarkdownHtml(parseMarkdown(node.content || ''));
@@ -178,11 +177,12 @@ function renderField(node, state) {
         state.computed.push(node);
     } else if (node.fieldType === 'hidden') {
         renderHiddenInput(node, wrapper, state);
+    } else if (node.fieldType === 'chronicdiseases') {
+        renderChronicDiseasesField(node, wrapper, state);
+    } else if (node.fieldType === 'pastevents') {
+        renderPastEventsField(node, wrapper, state);
     }
-    else if (node.fieldType === 'comorbidities') {
-        renderComorbiditiesField(node, wrapper, state);
-    } // else if (node.fieldType === 'personal-history') {
-    //     wrapper.classList.remove('inline');
+    // else if (node.fieldType === 'personal-history') {
     //     const title = document.createElement('label'); title.textContent = node.label || 'Personal History'; wrapper.appendChild(title);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
     //     holder.innerHTML = `<div class='ph-grid'>
@@ -196,22 +196,7 @@ function renderField(node, state) {
     // </div>`;
     //     wrapper.appendChild(holder);
     //     state.fieldRefs[node.id] = { get value() { const obj = {}; holder.querySelectorAll('[data-key]').forEach(el => { obj[el.dataset.key] = el.value; }); return obj; } };
-    // } else if (node.fieldType === 'menstrual-history') {
-    //     wrapper.classList.remove('inline');
-    //     const title = document.createElement('label'); title.textContent = node.label || 'Menstrual History'; wrapper.appendChild(title);
-    //     const holder = document.createElement('div'); holder.className = 'field-input';
-    //     holder.innerHTML = `<div class='mh-grid'>
-    //   <div><span>Menarche Age</span><input type='number' min='8' max='25' data-key='menarche_age'/></div>
-    //   <div><span>Cycle Regularity</span><select data-key='regularity'><option>Regular</option><option>Irregular</option></select></div>
-    //   <div><span>Cycle Length (days)</span><input type='number' min='10' max='60' data-key='cycle_len'/></div>
-    //   <div><span>Bleed Duration (days)</span><input type='number' min='1' max='15' data-key='bleed_len'/></div>
-    //   <div><span>Flow</span><select data-key='flow'><option>Normal</option><option>Light</option><option>Heavy</option></select></div>
-    //   <div><span>Pain/Clots</span><input data-key='pain_clots' placeholder='Pain, clots'/></div>
-    // </div>`;
-    //     wrapper.appendChild(holder);
-    //     state.fieldRefs[node.id] = { get value() { const obj = {}; holder.querySelectorAll('[data-key]').forEach(el => { obj[el.dataset.key] = el.value; }); return obj; } };
     // } else if (node.fieldType === 'general-exam') {
-    //     wrapper.classList.remove('inline');
     //     const title = document.createElement('label'); title.textContent = node.label || 'General Examination'; wrapper.appendChild(title);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
     //     holder.innerHTML = `<div class='ge-grid'>
@@ -238,7 +223,6 @@ function renderField(node, state) {
     //     state.fieldRefs[node.id] = { get value() { const obj = {}; holder.querySelectorAll('[data-key]').forEach(el => { obj[el.dataset.key] = el.value; }); obj.signs = [...holder.querySelectorAll('[data-sign]')].filter(c => c.checked).map(c => c.dataset.sign); return obj; } };
     // } else if (node.fieldType === 'drug-treatment') {
     //     // uses local drug json catalogs
-    //     wrapper.classList.remove('inline');
     //     const label = document.createElement('label'); label.textContent = node.label || 'Treatment'; wrapper.appendChild(label);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
     //     const table = document.createElement('table'); table.className = 'drug-table'; table.innerHTML = '<thead><tr><th>Drug</th><th>Dose</th><th>Frequency</th><th>Route</th><th>Duration</th><th></th></tr></thead><tbody></tbody>';
@@ -268,7 +252,6 @@ function renderField(node, state) {
     //     }
     //     state.fieldRefs[node.id] = { get value() { return [...tbody.querySelectorAll('tr')].map(tr => { const tds = tr.querySelectorAll('td'); return { drug: tds[0].querySelector('select').value, dose: tds[1].querySelector('select').value, frequency: tds[2].querySelector('select').value, route: tds[3].querySelector('select').value, duration: tds[4].querySelector('input').value }; }).filter(r => r.drug); } };
     // } else if (node.fieldType === 'investigations') {
-    //     wrapper.classList.remove('inline');
     //     const label = document.createElement('label'); label.textContent = node.label || 'Investigations'; wrapper.appendChild(label);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
     //     const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.textContent = 'Add Investigation';
@@ -285,14 +268,12 @@ function renderField(node, state) {
     //     addBtn.addEventListener('click', () => addRow());
     //     state.fieldRefs[node.id] = { get value() { return [...list.querySelectorAll('.invest-row')].map(r => { const [n, v, d] = r.querySelectorAll('input'); return { name: n.value, value: v.value, date: d.value }; }).filter(r => r.name); } };
     // } else if (node.fieldType === 'opinions') {
-    //     wrapper.classList.remove('inline');
     //     const label = document.createElement('label'); label.textContent = node.label || 'Opinions Obtained'; wrapper.appendChild(label);
     //     const holder = document.createElement('div'); holder.className = 'field-input'; const table = document.createElement('table'); table.innerHTML = '<thead><tr><th>Date</th><th>Department</th><th>Impression</th><th>Suggestions</th><th></th></tr></thead><tbody></tbody>';
     //     const tbody = table.querySelector('tbody'); const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.textContent = 'Add Opinion'; addBtn.addEventListener('click', () => addRow()); holder.appendChild(table); holder.appendChild(addBtn); wrapper.appendChild(holder);
     //     function addRow(data = {}) { const tr = document.createElement('tr');['date', 'text', 'text', 'text'].forEach((t, i) => { const td = document.createElement('td'); const el = document.createElement('input'); el.type = t; el.value = [data.date, data.department, data.impression, data.suggestions][i] || ''; td.appendChild(el); tr.appendChild(td); }); const act = document.createElement('td'); const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '×'; rm.addEventListener('click', () => tr.remove()); act.appendChild(rm); tr.appendChild(act); tbody.appendChild(tr); }
     //     state.fieldRefs[node.id] = { get value() { return [...tbody.querySelectorAll('tr')].map(tr => { const [d, dep, imp, sug] = [...tr.querySelectorAll('input')].map(i => i.value); return { date: d, department: dep, impression: imp, suggestions: sug }; }).filter(r => r.date || r.department); } };
     // } else if (node.fieldType === 'followup') {
-    //     wrapper.classList.remove('inline');
     //     const label = document.createElement('label'); label.textContent = node.label || 'Follow Up Advice'; wrapper.appendChild(label);
     //     const holder = document.createElement('div'); holder.className = 'field-input'; const table = document.createElement('table'); table.innerHTML = '<thead><tr><th>Department</th><th>Location/OPD</th><th>Date</th><th>Time</th><th>Advice</th><th></th></tr></thead><tbody></tbody>';
     //     const tbody = table.querySelector('tbody'); const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.textContent = 'Add Follow Up'; addBtn.addEventListener('click', () => addRow()); holder.appendChild(table); holder.appendChild(addBtn); wrapper.appendChild(holder);
@@ -302,51 +283,6 @@ function renderField(node, state) {
     //     return null;
     // }
     return wrapper;
-}
-
-function renderComplaintsField(node, wrapper, state) {
-    wrapper.classList.remove('inline');
-    const editor = new DataEditor();
-    editor.setAttribute('add-label', 'Add Complaint');
-
-    // Define columns: complaint (custom autocomplete), duration (number), unit (select)
-    editor.columns = [
-        {
-            key: 'complaint', label: 'Complaint', type: 'custom', placeholder: node.placeholder || 'Complaint', width: '50%',
-            createEditor: (rowIndex, col, value, commit) => {
-                const ac = new AutoCompleteBox();
-                ac.placeholder = col.placeholder || '';
-                ac.value = value || '';
-                ac.fetcher = snomedSearchWithCache;
-                ac.getItemLabel = (item) => item || '';
-                // Commit on selection / enter
-                ac.addEventListener('commit', e => commit(e.detail.value));
-                // Also commit while typing so data model stays in sync
-                ac.addEventListener('text-changed', () => commit(ac.value));
-                return ac;
-            },
-            getValue: (el) => el.value,
-            setValue: (el, v) => { el.value = v || ''; }
-        },
-        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'Duration' },
-        { key: 'unit', label: 'Unit', type: 'select', options: ['days', 'weeks', 'months', 'years'], default: 'days' }
-    ];
-
-    wrapper.appendChild(editor);
-
-    state.fieldRefs[node.id] = {
-        get value() {
-            return (editor.items || []).map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }))
-                .filter(it => it.complaint);
-        },
-        set value(v) {
-            if (Array.isArray(v)) {
-                editor.items = v.map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }));
-            } else {
-                editor.items = [];
-            }
-        }
-    };
 }
 
 function renderDiagnosisField(node, wrapper, state) {
@@ -410,34 +346,128 @@ function renderDiagnosisField(node, wrapper, state) {
     };
 }
 
-function renderComorbiditiesField(node, wrapper, state) {
-    wrapper.classList.remove('inline');
-    const knownList = getDefaultComorbidities();
+function renderComplaintsField(node, wrapper, state) {
+    const knownList = [];
+    if (node.suggestions) {
+        const arr = [];
+        if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
+        else if (typeof node.suggestions === 'string') arr.push(...node.suggestions.split(',').map(s => s.trim()));
+        knownList.push(...arr);
+    }
     const editor = new DataEditor();
-    editor.classList.add('comorbidities-editor');
-    editor.setAttribute('add-label', 'Add Comorbidity');
+    editor.setAttribute('add-label', 'Add Complaint');
     editor.columns = [
-        { key: 'comorbidity', label: 'Comorbidity', type: 'text', placeholder: 'e.g. Diabetes Mellitus', width: '35%' },
-        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'e.g. 5', width: '15%' },
-        { key: 'unit', label: 'Unit', type: 'select', options: ['years', 'months', 'weeks', 'days'], default: 'years', width: '15%' },
-        { key: 'treatment', label: 'Treatment', type: 'text', placeholder: 'e.g. Metformin', width: '35%' }
+        {
+            key: 'complaint', label: 'Complaint', type: 'custom', placeholder: node.placeholder || 'Complaint', width: '50%',
+            createEditor: (rowIndex, col, value, commit) => {
+                const ac = new AutoCompleteBox();
+                ac.placeholder = col.placeholder || '';
+                ac.value = value || '';
+                ac.fetcher = snomedSearchWithCache;
+                ac.getItemLabel = (item) => item || '';
+                ac.addEventListener('commit', e => commit(e.detail.value));
+                ac.addEventListener('text-changed', () => commit(ac.value));
+                return ac;
+            },
+            getValue: (el) => el.value,
+            setValue: (el, v) => { el.value = v || ''; }
+        },
+        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'Duration' },
+        { key: 'unit', label: 'Unit', type: 'select', options: ['days', 'weeks', 'months', 'years'], default: 'days' }
     ];
+
     editor.quickAdd = {
         items: knownList,
-        onAdd: (name) => ({ comorbidity: name, duration: '', unit: 'years', treatment: '' }),
-        matchItem: (items, name) => items.some(it => (it.comorbidity || '').toLowerCase() === name.toLowerCase())
+        onAdd: (name) => ({ complaint: name, duration: '', unit: 'days' }),
+        matchItem: (items, name) => items.some(it => (it.complaint || '').toLowerCase() === name.toLowerCase())
     };
 
     wrapper.appendChild(editor);
 
     state.fieldRefs[node.id] = {
-        get value() { return (editor.items || []).filter(it => it.comorbidity); },
+        get value() {
+            return (editor.items || []).map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }))
+                .filter(it => it.complaint);
+        },
+        set value(v) {
+            if (Array.isArray(v)) {
+                editor.items = v.map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }));
+            } else {
+                editor.items = [];
+            }
+        }
+    };
+}
+
+function renderChronicDiseasesField(node, wrapper, state) {
+    const knownList = getKnownChronicDiseases();
+    if (node.suggestions) {
+        const arr = [];
+        if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
+        else if (typeof node.suggestions === 'string') arr.push(...node.suggestions.split(',').map(s => s.trim()));
+        knownList.push(...arr);
+    }
+    const editor = new DataEditor();
+    editor.setAttribute('add-label', 'Add Chronic Disease');
+    editor.columns = [
+        { key: 'disease', label: 'Chronic Disease', type: 'text', placeholder: 'e.g. Diabetes Mellitus', width: '35%' },
+        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'e.g. 5', width: '15%' },
+        { key: 'unit', label: 'Unit', type: 'select', options: ['years', 'months', 'weeks', 'days'], default: 'years', width: '15%' },
+        { key: 'treatment', label: 'Treatment', type: 'text', placeholder: 'e.g. Metformin', width: '35%' }
+    ];
+
+    editor.quickAdd = {
+        items: knownList,
+        onAdd: (name) => ({ disease: name, duration: '', unit: 'years', treatment: '' }),
+        matchItem: (items, name) => items.some(it => (it.disease || '').toLowerCase() === name.toLowerCase())
+    };
+
+    wrapper.appendChild(editor);
+
+    state.fieldRefs[node.id] = {
+        get value() { return (editor.items || []).filter(it => it.disease); },
         set value(v) {
             if (Array.isArray(v)) {
                 const mapped = v.map(it => {
-                    if (typeof it === 'string') return { comorbidity: it, duration: '', unit: 'years', treatment: '' };
-                    return { comorbidity: it.comorbidity || it.name || '', duration: it.duration || '', unit: it.unit || 'years', treatment: it.treatment || '' };
-                }).filter(it => it.comorbidity);
+                    if (typeof it === 'string') return { disease: it, duration: '', unit: 'years', treatment: '' };
+                    return { disease: it.disease || it.name || '', duration: it.duration || '', unit: it.unit || 'years', treatment: it.treatment || '' };
+                }).filter(it => it.disease);
+                editor.items = mapped;
+            } else { editor.items = []; }
+        }
+    };
+}
+
+function renderPastEventsField(node, wrapper, state) {
+    const knownList = getKnownPastEvents();
+    if (node.suggestions) {
+        const arr = [];
+        if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
+        else if (typeof node.suggestions === 'string') arr.push(...node.suggestions.split(',').map(s => s.trim()));
+        knownList.push(...arr);
+    }
+    const editor = new DataEditor();
+    editor.setAttribute('add-label', 'Add Past Event');
+    editor.columns = [
+        { key: 'event', label: 'Event', type: 'text', placeholder: 'e.g. Surgery, Hospitalization, etc.', width: '40%' },
+        { key: 'details', label: 'Details', type: 'text', placeholder: 'e.g. Appendicectomy in 2015', width: '60%' }
+    ];
+    editor.quickAdd = {
+        items: knownList,
+        onAdd: (name) => ({ event: name, details: '' }),
+        matchItem: (items, name) => items.some(it => (it.event || '').toLowerCase() === name.toLowerCase())
+    };
+
+    wrapper.appendChild(editor);
+
+    state.fieldRefs[node.id] = {
+        get value() { return (editor.items || []).filter(it => it.event); },
+        set value(v) {
+            if (Array.isArray(v)) {
+                const mapped = v.map(it => {
+                    if (typeof it === 'string') return { event: it, details: '' };
+                    return { event: it.event || '', details: it.details || '' };
+                }).filter(it => it.event);
                 editor.items = mapped;
             } else { editor.items = []; }
         }
@@ -449,6 +479,7 @@ function renderInputField(node, wrapper, state) {
     input.id = node.id;
     input.name = node.id;
     input.type = node.fieldType;
+    if (input.type === 'checkbox') wrapper.classList.add('inline', 'reverse');
     if (node.placeholder) input.placeholder = node.placeholder;
     if (node.min) input.min = node.min;
     if (node.max) input.max = node.max;

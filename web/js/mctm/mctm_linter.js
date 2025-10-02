@@ -13,7 +13,8 @@ export const MCTM_SPEC = {
     list: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
     complaints: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
     diagnosis: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
-    image: { required: ['id'], optional: ['label', 'mode', 'maxSizeKB', 'if', 'pdf', 'ui'] },
+    chronicdiseases: { required: ['id'], optional: ['label', 'suggestions', 'shownegatives', 'if', 'pdf', 'ui'] },
+    pastevents: { required: ['id'], optional: ['label', 'suggestions', 'if', 'pdf', 'ui'] },
     static: { required: [], optional: ['content', 'if', 'pdf', 'ui'] },
     computed: { required: ['id', 'formula'], optional: ['label', 'format', 'if', 'pdf', 'ui'] },
     hidden: { required: ['id'], optional: ['default', 'pdf', 'ui'] },
@@ -81,7 +82,7 @@ export function lintMCTM({ source, ast, meta }) {
     });
 
     // Validate namespaced visibility objects
-    ['pdf','ui'].forEach(ns => {
+    ['pdf', 'ui'].forEach(ns => {
       const val = node[ns];
       if (val == null) return;
       if (typeof val !== 'object' || Array.isArray(val)) {
@@ -94,7 +95,7 @@ export function lintMCTM({ source, ast, meta }) {
         else if (sub === 'hidden' && typeof val[sub] !== 'boolean') diagnostics.push(warn(`${ns}.hidden should be boolean`, node.line));
       });
     });
-    
+
     if (node.fieldType === 'computed') {
       if (node.formula) {
         try { new Function('ctx', `with(ctx){ return ${node.formula}; }`); } catch (e) { diagnostics.push(err(`Invalid formula for ${node.id}: ${e.message}`, node.line)); }

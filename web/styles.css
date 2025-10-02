@@ -381,6 +381,10 @@ footer {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
+.group .group-body.layout-columns.cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .group .group-body.layout-columns.cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -402,8 +406,14 @@ footer {
     justify-content: space-between;
 }
 
-.form-row .inline {
-    flex-direction: column;
+.form-row.inline {
+    flex-direction: row;
+    justify-content: flex-start;
+}
+
+.form-row.inline.reverse {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
 }
 
 .form-row>label {
@@ -760,7 +770,6 @@ button[disabled] {
 .data-editor {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
 }
 
 .data-editor .data-cell {
@@ -777,20 +786,36 @@ button[disabled] {
     vertical-align: middle;
 }
 
-.data-editor-quickadd {
-    display: flex;
+.data-editor .data-editor-quickadd {
+    display: none;
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
-}
-
-.comorbidities-editor {
-    border: 1px solid var(--c-border);
     padding: var(--space-2);
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--c-border);
+    border-bottom: none;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
-/* Scrollbars (webkit + firefox color hint) */
+.data-editor.has-quickadd .data-editor-quickadd {
+    display: flex;
+}
+
+.data-editor .table-wrapper {
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+}
+
+.data-editor.has-quickadd .table-wrapper {
+    border-radius: 0px;
+}
+
+.data-editor .add-button {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* Scrollbars */
 * {
     scrollbar-color: var(--c-border) transparent;
 }

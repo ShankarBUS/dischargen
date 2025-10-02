@@ -38,7 +38,7 @@ logo: logo.jpg
 
 > "Chief Complaints"
 
-@complaints id:chief_complaints placeholder:"Search or enter a complaint" required @
+@complaints id:chief_complaints placeholder:"Search or enter a complaint" suggestions:"[Hello, Hi, Test]" required @
 
 > "History of Presenting Illness"
 
@@ -46,14 +46,74 @@ logo: logo.jpg
 
 > "Past History"
 
-@comorbidities id:comorbidities label:Comorbs @
+@chronicdiseases id:chronic_diseases label:"Chronic Diseases" suggestions:"AIDS" shownegatives @
+
+@pastevents id:past_events label:"Past Events" suggestions:"IV Drug Abuse" @
+
+> "Personal History"
+
+{ "" id:personal_habits layout:hstack
+
+@select id:diet label:Diet options:"[Mixed, Vegeterian, Non-Vegeterian]" @
+@select id:sleep label:Sleep options:"[Normal, Disturbed, Increased, Decreased]" @
+@select id:appetite label:Appetite options:"[Normal, Increased, Decreased]" @
+@select id:bowel_habits label:"Bowel Habits" options:"[Normal, Altered]" @
+@select id:bladder_habits label:"Bladder Habits" options:"[Normal, Altered]" @
+
+}
+
+@checkbox id:smokingcb label:Smoking truevalue:"Known Smoker" falsevalue:"Non-Smoker" @
+
+{ "" id:smoking if:smokingcb==true layout:hstack
+
+@select id:cig_or_pack label:"Select" options:"[Cigarettes, Packs]" pdf.hidden:true @
+@number id:cigs_per_day label:"No. of Cigarettes/day" if:cig_or_pack==Cigarettes @
+@number id:packs_per_day_i label:"No. of Packs/day" if:cig_or_pack==Packs @
+@number id:cigs_per_pack label:"No. of Cigarettes/Pack" @
+@computed id:packs_per_day label:"No. of Packs/day" formula:"(cig_or_pack === 'Packs') ? packs_per_day_i : cigs_per_day / cigs_per_pack" if:cig_or_pack==Cigarettes @
+@number id:years_of_smoking label:"Years of Smoking" @
+@computed id:pack_index label:"Pack Index" formula:"packs_per_day * years_of_smoking" @
+@computed id:smoking_index label:"Smoking Index" formula:"pack_index *  cigs_per_pack" @
+
+}
+
+@checkbox id:alcoholcb label:Alcohol truevalue:"Known Alcoholic" falsevalue:"Non-Alcoholic" @
+
+{ "" id:alcohol if:alcoholcb==true layout:hstack
+
+@number id:alcohol_quantity label:"Quantity (mL)" @
+@text id:alcohol_frequency label:"Frequency" @
+@number id:alcohol_duration label:"Duration (years)" @
+
+}
 
 > "Menstrual History" if:patient_sex==Female
 
-{ "Cycle Info" layout:columns-2
+{ "" id:menstrual_cycle_info layout:hstack
 
-@number id:menarche_age label:"Menarche age" min:8 max:25 @
-@text id:cycle_len label:"Cycle length (days)" @
+@number id:menarche_age label:"Menarche Age" min:8 @
+@number id:menstruation_days label:"Menstruation Days" pdf.hidden:true @
+@number id:menstrual_cycle_len label:"Cycle length (days)" pdf.hidden:true @
+@select id:menstrual_cycle_regularity label:"Regularity" options:"[Regular, Irregular]" pdf.hidden:true @
+@computed id:menstrual_cycle_summary formula:"menstrual_cycle_regularity + ' ' + menstruation_days + '/' + menstrual_cycle_len + ' days cycle'" ui.hidden:true @
+@date id:last_menstrual_period label:"Last Menstrual Period" @
+
+}
+
+{ "" id:menstrual_associations layout:hstack
+
+@checkbox id:menstrual_pain label:"Pain" @
+@checkbox id:menstrual_clots label:"Clots" @
+@checkbox id:menstrual_smell label:"Foul Smell" @
+
+}
+
+@text id:menstrual_notes placeholder:"Additional Notes" @
+
+{ "" id:menopause_info layout:hstack
+
+@checkbox id:menopause label:Menopause truevalue:"Attained" falsevalue:"Not attained" @
+@text id:menopause_details placeholder:Details if:menopause==true @
 
 }
 
@@ -70,5 +130,3 @@ logo: logo.jpg
 > "Opinions Obtained" optional
 
 @table id:opinions columns:"[Date, Department, Impression, Advice]" @
-
-@text id:temp label:"Temp" placeholder:"Temp placeholder" default:"Default" @

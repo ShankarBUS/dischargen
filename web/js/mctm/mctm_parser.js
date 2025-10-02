@@ -153,8 +153,10 @@ function parseProps(chunk) {
     // Normalize string value (strip quotes, then decode) when not boolean true
     if (val !== true) {
       val = stripQuotes(val);
-      // Array syntax: [a,b,c]  (no nested arrays expected)
-      if (typeof val === 'string' && val.length >= 2 && val[0] === '[' && val[val.length - 1] === ']') {
+      if (typeof val === 'string' && /^(true|false)$/i.test(val)) {
+        val = /^true$/i.test(val);
+      } else if (typeof val === 'string' && val.length >= 2 && val[0] === '[' && val[val.length - 1] === ']') {
+        // Array syntax: [a,b,c]  (no nested arrays expected)
         const inner = val.slice(1, -1).trim();
         if (inner) {
           // Split on commas with trimming;

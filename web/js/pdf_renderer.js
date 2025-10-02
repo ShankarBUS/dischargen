@@ -1,6 +1,6 @@
 import { evaluateCondition } from './conditional.js';
 import { parseMarkdown } from './md_parser.js';
-import { getDefaultComorbidities } from './defaults.js';
+import { getKnownChronicDiseases } from './defaults.js';
 
 let fontsLoaded = false;
 
@@ -110,21 +110,38 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
       blocks.push({ ul: items.map(t => ({ text: toRunsWithFonts(t) })), margin: [0, 0, 0, 4] });
       return blocks;
     }
-    if (node.fieldType === 'comorbidities') {
+    if (node.fieldType === 'chronicdiseases') {
       const val = getValue(node.id);
-      const arr = Array.isArray(val) ? val.filter(o => o && o.comorbidity) : [];
+      const arr = Array.isArray(val) ? val.filter(o => o && o.disease) : [];
       if (!arr.length) return [];
-      const known = getDefaultComorbidities();
-      const presentLower = new Set(arr.map(o => o.comorbidity.toLowerCase()));
+      const known = getKnownChronicDiseases();
       const items = arr.map(o => {
         const dur = o.duration ? `× ${o.duration} ${o.unit || ''}`.replace(/\s+/g, ' ').trim() : '';
         const trx = o.treatment ? `- ${o.treatment}` : '';
-        return `K/C/O ${o.comorbidity} ${dur} ${trx}`.replace(/\s+/g, ' ').trim();
+        return `K/C/O ${o.disease} ${dur} ${trx}`.replace(/\s+/g, ' ').trim();
       });
-      const negatives = known.filter(k => !presentLower.has(k.toLowerCase()));
-      if (negatives.length) items.push(`N/K/C/O ${negatives.join('/')}`);
+      if (node.shownegatives && node.shownegatives !== false && known.length) {
+        const presentLower = new Set(arr.map(o => o.disease.toLowerCase()));
+        const negatives = known.filter(k => !presentLower.has(k.toLowerCase()));
+        if (negatives.length) items.push(`N/K/C/O ${negatives.join('/')}`);
+      }
       const blocks = [];
-      if (node.label) blocks.push({ text: toRunsWithFonts(node.label + ':'), style: 'sectionLabel', margin: [0, 6, 0, 2] });
+      // if (node.label) blocks.push({ text: toRunsWithFonts(node.label + ':'), style: 'sectionLabel', margin: [0, 6, 0, 2] });
+      blocks.push({ ul: items.map(t => ({ text: toRunsWithFonts(t) })), margin: [0, 0, 0, 4] });
+      return blocks;
+    }
+    if (node.fieldType === 'pastevents') {
+      const val = getValue(node.id);
+      const arr = Array.isArray(val) ? val : [];
+      if (!arr.length) return [];
+      const items = arr.map(o => {
+        if (!o || !o.event) return null;
+        const det = o.details ? `- ${o.details}` : '';
+        return `H/O ${o.event} ${det}`.trim();
+      }).filter(Boolean);
+      if (!items.length) return [];
+      const blocks = [];
+      // if (node.label) blocks.push({ text: toRunsWithFonts(node.label + ':'), style: 'sectionLabel', margin: [0, 6, 0, 2] });
       blocks.push({ ul: items.map(t => ({ text: toRunsWithFonts(t) })), margin: [0, 0, 0, 4] });
       return blocks;
     }
@@ -150,15 +167,19 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
         if (frags.length) childBlocks.push(frags);
       }
     }
+
     const out = [];
     const titleNode = node.title ? {
       text: toRunsWithFonts(node.title), style: 'sectionLabel', margin: [0, 6, 0, 4]
     } : null;
+
     const normalizeFirst = (arr) => {
-      if (!arr.length) return arr; const f = arr[0];
+      if (!arr.length) return arr;
+      const f = arr[0];
       if (f.margin) arr[0] = { ...f, margin: [f.margin[0] || 0, 0, f.margin[2] || 0, f.margin[3] || 0] };
       return arr;
     };
+
     if (layout === 'hstack') {
       // Use columns for simplicity. Each direct child -> column stack.
       const cols = childBlocks.map(cb => ({ stack: normalizeFirst(cb.slice()), width: 'auto' }));
@@ -203,7 +224,7 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
     else if (node.type === 'field') renderFieldNode(node).forEach(n => content.push(n));
   }
 
-  const dateStr = new Date().toLocaleString();
+  const dateStr = new Date().toLocaleString('en-IN', { dateStyle: 'short' });
   const docDefinition = {
     pageSize: 'A4', pageMargins: [40, 40, 40, 40], content,
     defaultStyle: { font: 'Poppins', fontSize: 10 },
@@ -262,8 +283,19 @@ function buildFieldLine(node, val) {
       break;
     }
     case 'checkbox': {
-      if (typeof val === 'boolean') text = val ? node.trueValue || '(+)' : node.falseValue || '(-)';
+      if (typeof val === 'boolean') text = val ? node.truevalue || '(+)' : node.falsevalue || '(-)';
       break;
+    }
+    case 'computed': {
+      if (val !== undefined && val !== null && val !== 0 && val !== '0') text = str(val);
+      break;
+    }
+    case 'date': {
+      if (typeof val === 'string' && val) {
+        const dt = new Date(val);
+        if (!isNaN(dt.getTime())) text = dt.toLocaleDateString('en-IN', { dateStyle: 'short' });
+        break;
+      }
     }
     default: {
       text = str(val);

@@ -1,4 +1,4 @@
-# MCTM (Medical Case Template Markup) - Specification v1.1
+# MCTM (Medical Case Template Markup) - Specification v1.0
 
 This document specifies the syntax, semantics, and validation rules for MCTM templates used to author structured clinical documents (e.g., discharge summaries, case sheets, notes). The specification is aligned with the current reference parser and renderer in this repository.
 
@@ -16,7 +16,7 @@ Out of scope: UI layout specifics, theming, or PDF engine details.
 An MCTM document consists of (in order):
 1) Optional version directive line: `@mctm <major>.<minor>`.
 2) Metadata Block delimited by lines containing only `---`.
-3) Zero or more Sections: `> "Title" id:... if:...`.
+3) Zero or more Sections: `> "Title" id:... if:... optional default:false`.
 4) Within sections (or at root if no sections): Groups ( `{ "Group Title" ... }` ), Field blocks (`@...` fences), nested groups, and/or static paragraphs.
 5) Optional include directives resolved at parse-time via `@include template:"path/to.tpl.mctm" id:part_id @`.
 
@@ -65,18 +65,20 @@ Unknown metadata keys MAY be present and SHOULD be preserved by tooling.
 
 Syntax:
 ```
-> "Section Title" id:custom_id if:patient_sex==Female
+> "Section Title" id:custom_id if:patient_sex==Female optional default:false
 ```
 
 Rules:
-- Extended syntax can include quoted title, optional `id:` (auto-generated from title if omitted), and optional `if:` condition.
-- Sections only appear at the root level (not nested inside groups or other sections).
+- Extended syntax can include quoted title, optional `id:` (auto-generated from title if omitted), optional `if:` condition, and optional flags/properties `optional` and `default:false`.
+- `optional` (boolean flag): When present (true), the section is user-toggleable in the UI via a checkbox. If unchecked the section body is hidden in UI and omitted from export logic that honors `_sectionOptionals` state.
+- `default:false` together with `optional` makes the checkbox initially unchecked (default is checked when `optional` is true and `default:false` not provided).
+- Sections only appear at the root level (not nested inside groups or other sections). Included sections nested via `@include` are flattened (their children inlined) when included inside a non-root container.
 - Auto ID Generation: Title slugified to lowercase, non `[a-z0-9._-]` replaced with `_`, consecutive `_` collapsed.
-- Conditions (`if:`) on sections control visibility of all contained descendants.
+- Conditions (`if:`) on sections control visibility of all contained descendants and are evaluated before optional logic; a hidden section by `if:` is not shown even if optional.
 
 Example:
 ```
-> "Menstrual History" if:patient_sex==Female
+> "Menstrual History" if:patient_sex==Female optional
 ```
 
 ## 7. Field Blocks
@@ -129,6 +131,8 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 | list | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | Simple repeating free-text list |
 | complaints | id | label, required, default, if, pdf.hidden, ui.hidden | Complaints widget |
 | diagnosis | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | ICD search/entry |
+| chronicdiseases | id | label, suggestions, shownegatives, if, pdf.hidden, ui.hidden | Structured chronic disease list (disease, duration, unit, treatment) |
+| pastevents | id | label, suggestions, if, pdf.hidden, ui.hidden | Past medical/surgical events list |
 | static | (none) | if, pdf.hidden, ui.hidden | Body preserved as `content` |
 | computed | id, formula | label, format, if, pdf.hidden, ui.hidden | Expression evaluated at runtime |
 | hidden | id | default, pdf.hidden (implicit), ui.hidden | Hidden value (always omitted from PDF) |
@@ -144,7 +148,7 @@ Syntax (fenced like any field):
 
 Properties:
 - `template` (required): path/URL to external `.mctm` file (resolved against document base URL).
-- `id`: identifier of the part (section/group/field) to import from the referenced template.
+- `id` or `part`: identifier of the part (section/group/field) to import from the referenced template (the parser accepts either; `part` is an alias).
 
 Expansion Rules:
 - Resolved during parse (not at render) – resulting AST has no `include` nodes.
@@ -283,6 +287,8 @@ PDF inclusion guidelines:
 - `list`: printed as a single line with items joined by `; `.
 - `diagnosis`: printed as `label: description (code)` joined by `; `.
 - `complaints`: printed as `complaint × duration unit` joined by `; `.
+- `chronicdiseases`: each entry printed in list form as `K/C/O <Disease> × <duration> <unit> - <treatment>` (treatment part omitted if empty). If `shownegatives:true`, known chronic diseases absent from the list may produce an additional negative summary (e.g., `N/K/C/O ...`).
+- `pastevents`: each entry printed prefixed with `H/O` (e.g., `H/O Surgery - Appendicectomy 2015`).
 - `checkbox`: printed as `label: (+)` or `(-)` unless `trueValue`/`falseValue` provided.
 - `computed`: printed as `label: value`.
 - `hidden`: skipped.
@@ -293,7 +299,7 @@ PDF inclusion guidelines:
 
 Markdown support in PDF (baseline): bold `**text**`, italic `*text*`, simple unordered/ordered lists, blank-line paragraph breaks.
 
-## 13. Grammar (EBNF, informative, updated v1.1 additions marked *)
+## 13. Grammar (EBNF)
 
 ```
 MCTM              := VersionDirective? MetaBlock Node*
@@ -322,6 +328,8 @@ Unquoted          := /[^\s\]]+/
 
 // * Include is syntactically a FieldBlock with FieldType 'include'
 // * Layout options appear as PropToken: layout:vstack|hstack|columns-N
+// * Sections may have 'optional' flag and optional 'default:false'
+// * 'part:' is accepted as an alias of 'id:' within include blocks
 ```
 
 ## 14. Security Considerations
@@ -337,7 +345,7 @@ Computed `formula` values MAY be evaluated using JavaScript `Function` or simila
 - Parsers SHOULD accept documents without a version directive by assuming the highest compatible version.
 - New field types MAY be introduced; unknown types SHOULD produce a linter warning but MUST NOT halt parsing.
 
-## 16. Minimal Example (v1.1 features)
+## 16. Minimal Example (v1.0 features)
 
 ```
 @mctm 1.0
@@ -365,12 +373,20 @@ pdf_footer: "For clinical use"
 @date id:date_discharge label:"Discharge Date" @
 @computed id:stay_days label:"Duration of Stay (days)" formula:"((new Date(date_discharge)-new Date(date_admission))/(1000*60*60*24))" format:decimal(0) @
 
-> "Menstrual History" if:patient_sex==Female
+> "Menstrual History" if:patient_sex==Female optional default:false
 @static
 Applies only to female patients.
 @
 
 @text id:internal_note label:"Internal Note" multiline pdf.hidden:true @
+
+{ "Chronic Conditions" layout:vstack
+  @chronicdiseases id:chronic label:"Chronic Diseases" shownegatives suggestions:[Diabetes%20Mellitus,Systemic%20Hypertension] @
+}
+
+{ "Past Events" layout:vstack
+  @pastevents id:past_events label:"Past Events" @
+}
 
 @include template:"templates/common.mctm" id:discharge_advice @
 ```
@@ -386,6 +402,8 @@ Applies only to female patients.
 - list: free-text list; typically rendered as delimited string.
 - complaints: complaint + duration/unit entries.
 - diagnosis: ICD or free-text diagnosis entries.
+- chronicdiseases: Structured chronic disease list (disease, duration, unit, treatment) with optional negatives (`shownegatives:true`).
+- pastevents: Past events (event + details) list.
 - static: display-only text; body preserved as-is.
 - computed: expression-derived value; not user-editable.
 - hidden: non-UI value; always omitted from PDF.
