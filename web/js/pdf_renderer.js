@@ -1,6 +1,7 @@
 import { evaluateCondition } from './conditional.js';
 import { parseMarkdown } from './md_parser.js';
 import { getKnownChronicDiseases } from './defaults.js';
+import { getDepartmentById } from './search_handler.js';
 
 let fontsLoaded = false;
 
@@ -40,13 +41,24 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
     } catch (e) { console.warn('Logo load failed', e); }
   }
   const headerTextColumn = [];
+  
+  function addHeaderLine(line) {
+    if (line) headerTextColumn.push(
+      { text: toRunsWithFonts(line), width: '*', style: 'headerLine', alignment: 'center', margin: [0, 0, 0, 2] }
+    );
+  }
+
   ['hospital', 'department', 'unit', 'pdf_header'].forEach(k => {
-    if (meta[k]) headerTextColumn.push(
-      {
-        text: toRunsWithFonts(meta[k]), width: '*',
-        style: 'headerLine', alignment: 'center', margin: [0, 0, 0, 2]
-      });
+    if (meta[k]) {
+      if (k === 'department') {
+        const dept = getDepartmentById(meta.department);
+        addHeaderLine(dept ? 'Department of ' + dept.label : meta.department);
+      } else {
+        addHeaderLine(meta[k]);
+      }
+    }
   });
+
   if (headerColumns.length || headerTextColumn.length)
     content.push({ columns: [...headerColumns, headerTextColumn], columnGap: 10 });
 
@@ -238,11 +250,11 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
       {
         columns: [
           {
-            text: meta.footer ? toRunsWithFonts(meta.footer) : '',
+            text: meta.pdf_footer ? toRunsWithFonts(meta.pdf_footer) : '',
             alignment: 'left', fontSize: 9, margin: [40, 0, 0, 0]
           },
           {
-            text: toRunsWithFonts(`Generated ${dateStr}  |  Page ${currentPage} of ${pageCount}`),
+            text: toRunsWithFonts(`Generated ${dateStr} | Page ${currentPage} of ${pageCount}`),
             alignment: 'right', fontSize: 9, margin: [0, 0, 40, 0]
           }]
       }),
@@ -260,6 +272,7 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
   };
   return docDefinition;
 }
+
 function buildTableRows(node, tableVal) {
   const headers = node.columns;
   const rows = Array.isArray(tableVal) ? tableVal : [];

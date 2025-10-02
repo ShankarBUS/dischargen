@@ -53,11 +53,10 @@ Constraints:
 
 Required metadata keys:
 - `template_id`
-- `title`
 - `version` (integer or string)
 
 Recommended keys:
-- `logo`, `hospital`, `department`, `unit`, `pdf_header`, `pdf_footer`
+- `title`, `hospital`, `department`, `unit`, `pdf_header`, `pdf_footer`, `logo`
 
 Unknown metadata keys MAY be present and SHOULD be preserved by tooling.
 
@@ -246,7 +245,7 @@ Implementations SHOULD provide validation and surface diagnostics as follows.
 
 Errors (template is considered invalid):
 - Duplicate field `id`.
-- Missing required metadata key (`template_id`, `title`, `version`).
+- Missing required metadata key (`template_id`, `version`).
 - Unknown or malformed field fence (e.g., `@` without type).
 - Unclosed fence (EOF before closing `@`).
 - `computed` without `formula`.

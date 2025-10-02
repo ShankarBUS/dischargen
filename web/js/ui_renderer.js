@@ -1,4 +1,4 @@
-import { icdSearchWithCache, snomedSearchWithCache } from './search_handler.js';
+import { getDepartmentById, icdSearchWithCache, searchDepartments, snomedSearchWithCache } from './search_handler.js';
 import { AutoCompleteBox } from './components/autocompletebox.js';
 import { DataEditor } from './components/dataeditor.js';
 import { evaluateCondition } from './conditional.js';
@@ -6,88 +6,166 @@ import { applyValidation } from './validation.js';
 import { parseMarkdown, escapeHtml } from './md_parser.js';
 import { getKnownChronicDiseases, getKnownPastEvents } from './defaults.js';
 
-export function renderAST(root, state) {
-    // Recursively render nodes. renderUI flag controls DOM creation; ui:hidden nodes still register values.
+export function renderUI(root, state) {
     if (!state.sectionOptionals) state.sectionOptionals = {};
-    const renderNodes = (nodes, parent, renderUI = true) => {
-        for (const node of nodes) {
-            if (!node || node.type === 'include') continue;
-            const hideUI = (node.ui && node.ui.hidden) === true; // ui.hidden boolean controls UI visibility
-            const nodeRenderUI = renderUI && !hideUI;
-
-            if (node.type === 'section') {
-                // Unified section rendering (optional / non-optional) with reduced duplication
-                const buildSectionElements = () => {
-                    const sectionEl = document.createElement('div');
-                    sectionEl.className = 'section';
-                    if (node.if) sectionEl.dataset.condition = node.if;
-                    if (node.pdf && node.pdf.hidden) sectionEl.dataset.pdfHidden = 'true';
-                    if (hideUI) sectionEl.dataset.uiHidden = 'true';
-
-                    const headerRow = document.createElement('div');
-                    headerRow.className = 'section-header-row';
-                    const h = document.createElement('h1');
-                    h.textContent = node.title || '';
-                    h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
-                    headerRow.appendChild(h);
-
-                    let checkbox = null;
-                    if (node.optional === true) {
-                        checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.className = 'section-optional-checkbox';
-                        const prev = node.id && state.sectionOptionals[node.id];
-                        const initial = (prev ? prev.checked : (node.default === false ? false : true));
-                        checkbox.checked = initial;
-                        headerRow.appendChild(checkbox);
-                    }
-                    sectionEl.appendChild(headerRow);
-
-                    const body = document.createElement('div');
-                    body.className = 'section-body';
-                    renderNodes(node.children || [], body, nodeRenderUI);
-                    sectionEl.appendChild(body);
-
-                    if (checkbox) {
-                        const syncBody = () => { body.style.display = checkbox.checked ? '' : 'none'; };
-                        checkbox.addEventListener('change', syncBody);
-                        syncBody();
-                        if (node.id) state.sectionOptionals[node.id] = checkbox;
-                    }
-                    return sectionEl;
-                };
-
-                if (nodeRenderUI) {
-                    parent.appendChild(buildSectionElements());
-                } else {
-                    // If section is opted for ui.hidden and is optional and unchecked, skip entirely;
-                    if (node.optional === true && state.sectionOptionals[node.id]
-                        && !state.sectionOptionals[node.id].checked) {
-                        // Skip rendering
-                        continue;
-                    }
-                    // Else render children without wrapper/header.
-                    renderNodes(node.children || [], parent, false);
-                }
-            } else if (node.type === 'group') {
-                if (nodeRenderUI) {
-                    const groupEl = renderGroup(node, state, renderNodes);
-                    if (groupEl) parent.appendChild(groupEl);
-                } else {
-                    (node.children || []).forEach(ch => {
-                        if (!ch) return;
-                        if (ch.type === 'field') registerHiddenUIField(ch, state);
-                        else if (ch.type === 'group' || ch.type === 'section') renderNodes([ch], parent, false);
-                    });
-                }
-            } else if (node.type === 'field') {
-                if (hideUI) { registerHiddenUIField(node, state); continue; }
-                const fieldEl = renderField(node, state);
-                if (fieldEl && nodeRenderUI) parent.appendChild(fieldEl);
-            }
+    try {
+        if (state && state.meta) {
+            const metaNode = { type: 'section', title: 'Metadata', id: '__meta__', optional: false };
+            const metaSection = renderSection(metaNode, state, { customBodyBuilder: (body) => buildMetaEditorBody(body, state) });
+            if (metaSection) root.appendChild(metaSection);
         }
+    } catch { }
+    renderNodes(state.ast || [], root, state, true);
+}
+
+function renderNodes(nodes, parent, state, renderUI = true) {
+    for (const node of nodes) {
+        if (!node || node.type === 'include') continue;
+        const hideUI = (node.ui && node.ui.hidden) === true;
+        const nodeRenderUI = renderUI && !hideUI;
+
+        if (node.type === 'section') {
+            if (nodeRenderUI) {
+                const sectionEl = renderSection(node, state, { hideUI, renderChildrenUI: nodeRenderUI });
+                if (sectionEl) parent.appendChild(sectionEl);
+            } else {
+                if (node.optional === true && state.sectionOptionals[node.id]
+                    && !state.sectionOptionals[node.id].checked) {
+                    continue; // skip entirely
+                }
+                // Render children without wrapper
+                renderNodes(node.children || [], parent, state, false);
+            }
+        } else if (node.type === 'group') {
+            if (nodeRenderUI) {
+                const groupEl = renderGroup(node, state, (childNodes, p, ui) => renderNodes(childNodes, p, state, ui));
+                if (groupEl) parent.appendChild(groupEl);
+            } else {
+                (node.children || []).forEach(ch => {
+                    if (!ch) return;
+                    if (ch.type === 'field') registerHiddenUIField(ch, state);
+                    else if (ch.type === 'group' || ch.type === 'section') renderNodes([ch], parent, state, false);
+                });
+            }
+        } else if (node.type === 'field') {
+            if (hideUI) { registerHiddenUIField(node, state); continue; }
+            const fieldEl = renderField(node, state);
+            if (fieldEl && nodeRenderUI) parent.appendChild(fieldEl);
+        }
+    }
+}
+
+function renderSection(node, state, { hideUI = false, renderChildrenUI = true, customBodyBuilder } = {}) {
+    const sectionEl = document.createElement('div');
+    sectionEl.className = 'section' + (node.id === '__meta__' ? ' meta-editor' : '');
+    if (node.if) sectionEl.dataset.condition = node.if;
+    if (node.pdf && node.pdf.hidden) sectionEl.dataset.pdfHidden = 'true';
+    if (hideUI) sectionEl.dataset.uiHidden = 'true';
+
+    const headerRow = document.createElement('div');
+    headerRow.className = 'section-header-row';
+    const h = document.createElement('h1');
+    h.textContent = node.title || '';
+    h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
+    headerRow.appendChild(h);
+
+    let checkbox = null;
+    if (node.optional === true) {
+        checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'section-optional-checkbox';
+        const prev = node.id && state.sectionOptionals[node.id];
+        const initial = (prev ? prev.checked : (node.default === false ? false : true));
+        checkbox.checked = initial;
+        headerRow.appendChild(checkbox);
+    }
+    sectionEl.appendChild(headerRow);
+
+    const body = document.createElement('div');
+    body.className = 'section-body';
+    if (customBodyBuilder) {
+        customBodyBuilder(body);
+    } else if (renderChildrenUI) {
+        renderNodes(node.children || [], body, state, true);
+    }
+    sectionEl.appendChild(body);
+
+    if (checkbox) {
+        const syncBody = () => { body.style.display = checkbox.checked ? '' : 'none'; };
+        checkbox.addEventListener('change', syncBody);
+        syncBody();
+        if (node.id) state.sectionOptionals[node.id] = checkbox;
+    }
+    return sectionEl;
+}
+
+async function buildMetaEditorBody(body, state) {
+    const meta = state.meta || (state.meta = {});
+
+    const defaultKeys = {
+        title: '',
+        hospital: '',
+        department: '',
+        unit: '',
+        pdf_header: '',
+        pdf_footer: ''
     };
-    renderNodes(state.ast || [], root, true);
+    Object.keys(defaultKeys).forEach(k => { if (meta[k] === undefined) meta[k] = defaultKeys[k]; });
+
+    const form = document.createElement('div');
+    form.className = 'meta-form';
+    body.appendChild(form);
+
+    function addTextRow(labelText, key, multiline = false, placeholder = '') {
+        const row = document.createElement('div');
+        row.className = 'meta-row';
+        const label = document.createElement('label');
+        label.textContent = labelText;
+        label.htmlFor = 'meta_' + key;
+        row.appendChild(label);
+        let input;
+        if (multiline) { input = document.createElement('textarea'); input.rows = 2; }
+        else { input = document.createElement('input'); input.type = 'text'; }
+        input.id = 'meta_' + key;
+        input.value = meta[key] || '';
+        if (placeholder) input.placeholder = placeholder;
+        input.addEventListener('input', () => { meta[key] = input.value; });
+        row.appendChild(input);
+        form.appendChild(row);
+    }
+
+    async function addDepartmentRow() {
+        const row = document.createElement('div');
+        row.className = 'meta-row';
+        const label = document.createElement('label');
+        label.textContent = 'Department';
+        label.htmlFor = 'meta_department';
+        row.appendChild(label);
+        const ac = new AutoCompleteBox();
+        ac.id = 'meta_department';
+        ac.setAttribute('placeholder', 'Start typing department...');
+
+        ac.fetcher = async (q) => searchDepartments(q, 30);
+        ac.getItemLabel = (item) => item && item.label || '';
+
+        const dept = getDepartmentById(meta.department);
+        ac.value = dept ? dept.label : '';
+
+        ac.addEventListener('commit', (e) => {
+            const { item, value, fromSuggestion } = e.detail || {};
+            if (fromSuggestion && item) meta.department = item.id || '';
+            else if (value) meta.department = value;
+        });
+
+        row.appendChild(ac); form.appendChild(row);
+    }
+
+    addTextRow('Title', 'title', false, 'Title');
+    addTextRow('Hospital Name', 'hospital', false, 'Hospital');
+    await addDepartmentRow();
+    addTextRow('Unit', 'unit', false, 'e.g. Unit I');
+    addTextRow('PDF Header', 'pdf_header', true, 'Extra header line');
+    addTextRow('PDF Footer', 'pdf_footer', true, 'Footer line');
 }
 
 function registerHiddenUIField(node, state) {

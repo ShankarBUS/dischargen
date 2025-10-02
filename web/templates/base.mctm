@@ -1,12 +1,13 @@
 @mctm 1.0
 ---
 template_id: base
-title: "Discharge Summary"
 version: 1
+title: "Discharge Summary"
 hospital: "Tirunelveli Medical College Hospital, Tirunelveli"
-department: "Department of General Medicine"
-unit: "Medical Unit #"
-pdf_header: "Chief: Dr. Whatever Name"
+department:
+unit:
+pdf_header:
+pdf_footer:
 logo: logo.jpg
 ---
 
@@ -87,6 +88,8 @@ logo: logo.jpg
 
 }
 
+@text id:personal_history_notes placeholder:"Additional Notes" @
+
 > "Menstrual History" if:patient_sex==Female
 
 { "" id:menstrual_cycle_info layout:hstack
@@ -113,9 +116,13 @@ logo: logo.jpg
 { "" id:menopause_info layout:hstack
 
 @checkbox id:menopause label:Menopause truevalue:"Attained" falsevalue:"Not attained" @
-@text id:menopause_details placeholder:Details if:menopause==true @
+@text id:menopause_details placeholder:"Details e.g. 10 years back" if:menopause==true @
 
 }
+
+> "Family History" optional default:false
+
+@text id:family_history multiline default:"No significant family history" @
 
 > General Examination
 

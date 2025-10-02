@@ -249,12 +249,12 @@
     "id": "dept_obg",
     "label": "Obstetrics And Gynaecology - OG",
     "abbr": [
-      "OBG"
+      "OBG",
+      "OBGYN"
     ],
     "alt": [
       "Obstetrics & Gynecology",
-      "OBGYN",
-      "Women’s Health"
+      "Women's Health"
     ]
   },
   {
@@ -438,11 +438,13 @@
     "id": "dept_transfusion_bloodbank",
     "label": "Transfusion Medicine And Blood Bank",
     "abbr": [
-      "TMBB"
+      "TMBB",
+      "IHBT"
     ],
     "alt": [
       "Blood Bank",
-      "Transfusion Medicine"
+      "Transfusion Medicine",
+      "Immunohematology & Blood Transfusion"
     ]
   },
   {

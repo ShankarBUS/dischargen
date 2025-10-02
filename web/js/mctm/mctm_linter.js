@@ -2,7 +2,7 @@ import { parseMCTM } from './mctm_parser.js';
 
 export const MCTM_SPEC = {
   version: '1.0',
-  meta: { required: ['template_id', 'title', 'version'], optional: ['logo', 'hospital', 'department', 'unit', 'pdf_header', 'pdf_footer'] },
+  meta: { required: ['template_id', 'version'], optional: ['title', 'hospital', 'department', 'unit', 'pdf_header', 'pdf_footer', 'logo'] },
   fieldTypes: {
     text: { required: ['id'], optional: ['label', 'placeholder', 'multiline', 'required', 'pattern', 'default', 'if', 'pdf', 'ui'] },
     number: { required: ['id'], optional: ['label', 'placeholder', 'required', 'min', 'max', 'pattern', 'default', 'if', 'pdf', 'ui'] },

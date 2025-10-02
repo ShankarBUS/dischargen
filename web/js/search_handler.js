@@ -88,7 +88,7 @@ async function searchSNOMED(query, limit = 15, signal = null) {
     if (!json || !Array.isArray(json.items)) throw new Error('Unexpected SNOMED CT format');
     return json.items
       .slice(0, limit)
-      .map(item =>  item.concept ? (item.concept.pt ? item.concept.pt.term : item.concept.fsn ? item.concept.fsn.term : '') : '')
+      .map(item => item.concept ? (item.concept.pt ? item.concept.pt.term : item.concept.fsn ? item.concept.fsn.term : '') : '')
       .filter(t => t);
   } catch (e) {
     return [];
@@ -129,6 +129,43 @@ export async function snomedSearchWithCache(q) {
   }
   snomedQueryCache.set(trimmed.toLowerCase(), results);
   return results;
+}
+
+// #endregion
+
+// #region Department Search Handler
+
+/* Department local search (from departments.json) */
+export async function searchDepartments(query, limit = 15) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+  const allDepartments = await loadDepartments();
+
+  if (!q) return allDepartments.slice(0, limit);
+  const qq = q.toLowerCase();
+  return allDepartments.filter(d => {
+    if (!d) return false;
+    if ((d.label || '').toLowerCase().includes(qq)) return true;
+    if (Array.isArray(d.abbr) && d.abbr.some(a => (a || '').toLowerCase().includes(qq))) return true;
+    if (Array.isArray(d.alt) && d.alt.some(a => (a || '').toLowerCase().includes(qq))) return true;
+    return false;
+  }).slice(0, limit);
+}
+
+
+export async function loadDepartments() {
+  if (window._departmentsData) return Promise.resolve(window._departmentsData);
+  const res = await fetch('data/departments.json');
+  const data = await res.json();
+  window._departmentsData = data;
+  return data;
+}
+
+export function getDepartmentById(id) {
+  if (!id) return null;
+  const allDepartments = window._departmentsData || [];
+  if (!allDepartments.length) return null;
+  return allDepartments.find(d => d.id === id) || null;
 }
 
 // #endregion

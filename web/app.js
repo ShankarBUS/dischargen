@@ -1,8 +1,9 @@
 import { parseMCTMResolved } from './js/mctm/mctm_parser.js';
 import { lintMCTM } from './js/mctm/mctm_linter.js';
 import { validateAll } from './js/validation.js';
-import { renderAST, reevaluateConditions, evaluateComputedAll, getFieldValueFromRef } from './js/ui_renderer.js';
+import { renderUI, reevaluateConditions, evaluateComputedAll, getFieldValueFromRef } from './js/ui_renderer.js';
 import { renderPDF } from './js/pdf_renderer.js';
+import { loadDepartments } from './js/search_handler.js';
 
 const formContainer = document.getElementById('formContainer');
 const jsonBtn = document.getElementById('jsonBtn');
@@ -17,41 +18,6 @@ const pdfPreviewBtn = document.getElementById('pdfPreviewBtn');
 const pdfPrintBtn = document.getElementById('pdfPrintBtn');
 const pdfDownloadBtn = document.getElementById('pdfDownloadBtn');
 const templatesTree = document.getElementById('templatesTree');
-
-// Lab report fetch helper (POST) – returns parsed JSON (or raw text if not JSON).
-// NOTE: Expose ticket & params via UI / config; do NOT hardcode secrets.
-export async function fetchLabReport({
-  ticket, // varSSOTicketGrantingTicket value
-  userAgent = navigator.userAgent,
-  crNo,
-  startDate, // format: DD-MMM-YYYY e.g. 05-Sep-2020
-  endDate
-}) {
-  if (!ticket || !crNo || !startDate || !endDate) {
-    throw new Error('Missing required parameters (ticket, crNo, startDate, endDate)');
-  }
-  const url = 'https://tnhmis.dmer.tn.gov.in/HISInvestigationServicesApi/LabHTMLReportPrinting/getLabReportByCrNo';
-  const bodyParams = new URLSearchParams({
-    varSSOTicketGrantingTicket: ticket,
-    userAgent,
-    crNo,
-    startDate,
-    endDate
-  });
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'Accept': 'application/json, text/plain, */*'
-    },
-    body: bodyParams.toString()
-  });
-  if (!res.ok) {
-    throw new Error(`Lab report request failed: ${res.status} ${res.statusText}`);
-  }
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return text; }
-}
 
 const state = { meta: {}, ast: [], fieldRefs: {}, catalogsCache: {}, autosaveKey: 'discharge_autosave_v1', computed: [] };
 
@@ -100,11 +66,7 @@ async function loadTemplateRegistry() {
   try {
     const res = await fetch('templates/templates.json');
     templateRegistry = await res.json();
-    // Load departments catalog (for tree grouping)
-    try {
-      const dres = await fetch('data/departments.json');
-      departments = await dres.json();
-    } catch { }
+
     // Auto load default template
     const def = templateRegistry.find(t => t.default) || templateRegistry[0];
     if (def) await loadTemplateById(def.id);
@@ -144,8 +106,7 @@ async function loadTemplate(text) {
       console.groupEnd();
     }
   } catch (e) { console.error('Lint failed', e); }
-  renderAST(formContainer, state);
-  try { updateLangBadge(state.meta); } catch { }
+  renderUI(formContainer, state);
   restoreAutosave();
   reevaluateConditions(formContainer, state);
   evaluateComputedAll(state);
@@ -366,5 +327,6 @@ function restoreAutosave() {
 }
 
 initTheme();
-// initial load via registry
-loadTemplateRegistry();
+
+departments = await loadDepartments();
+await loadTemplateRegistry();
