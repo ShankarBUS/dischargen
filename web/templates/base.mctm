@@ -11,6 +11,11 @@ pdf_footer:
 logo: logo.jpg
 ---
 
+#overrides
+chief_complaints.suggestions: [Fever, Cough with expectoration, Wheeze]
+chronic_diseases.suggestions: [AIDS, Syphillis]
+#end
+
 > Demographics
 
 { "" id:demographics_columns layout:columns-2
@@ -39,7 +44,7 @@ logo: logo.jpg
 
 > "Chief Complaints"
 
-@complaints id:chief_complaints placeholder:"Search or enter a complaint" suggestions:"[Hello, Hi, Test]" required @
+@complaints id:chief_complaints placeholder:"Search or enter a complaint" required @
 
 > "History of Presenting Illness"
 
@@ -47,9 +52,9 @@ logo: logo.jpg
 
 > "Past History"
 
-@chronicdiseases id:chronic_diseases label:"Chronic Diseases" suggestions:"AIDS" shownegatives @
+@chronicdiseases id:chronic_diseases label:"Chronic Diseases" shownegatives @
 
-@pastevents id:past_events label:"Past Events" suggestions:"IV Drug Abuse" @
+@pastevents id:past_events label:"Past Events" @
 
 > "Personal History"
 

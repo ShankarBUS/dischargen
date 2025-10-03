@@ -283,21 +283,17 @@ footer {
 }
 
 /* Sections */
-.section {
-    border: 1px solid var(--c-border);
-    border-radius: var(--radius-lg);
-    background: var(--c-surface);
-    box-shadow: var(--shadow-sm);
-}
-
 .section-header-row {
     display: flex;
     align-items: center;
+    position: relative;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
     background: var(--c-surface-alt);
     border-bottom: 1px solid var(--c-border);
     border-radius: var(--radius-lg);
+    z-index: 1;
+    user-select: none;
 }
 
 .section-header-row h1 {
@@ -322,7 +318,7 @@ footer {
     border-left: none;
     border-top: none;
     transform: translateY(-75%) rotate(45deg);
-    transition: transform var(--t-fast);
+    transition: transform var(--t-med) ease-in-out;
     opacity: .7;
 }
 
@@ -330,27 +326,32 @@ footer {
     transform: translateY(-25%) rotate(-135deg);
 }
 
+.section.disabled .section-header-row h1::after {
+    display: none;
+}
+
 .section-body {
-    padding: var(--space-4) var(--space-4) var(--space-5);
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    border: 1px solid var(--c-border);
+    border-bottom-right-radius: var(--radius-lg);
+    border-bottom-left-radius: var(--radius-lg);
+    background: var(--c-surface);
+    box-shadow: var(--shadow-sm);
+    margin-top: calc(var(--radius-lg) * -1);
+    padding: calc(var(--space-4) + var(--radius-lg)) var(--space-4) var(--space-5);
     gap: var(--space-4);
-}
-
-/* Collapse animation */
-.section-body {
-    transition: grid-template-rows var(--t-med), opacity var(--t-fast), max-height var(--t-med) ease;
-    max-height: 2400px;
-    opacity: 1;
+    animation: slideDown var(--t-med) ease-in-out;
+    z-index: -1;
 }
 
 .section.collapsed .section-body {
-    max-height: 0;
-    opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    overflow: hidden;
+    display: none;
+}
+
+.section.disabled .section-body {
+    display: none;
 }
 
 /* Optional checkbox (section-optional-checkbox) */
@@ -1185,4 +1186,16 @@ input[type=checkbox]::after {
 input[type=checkbox]:checked::after {
     opacity: 1;
     transform: rotate(45deg);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10%);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

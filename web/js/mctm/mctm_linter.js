@@ -4,24 +4,24 @@ export const MCTM_SPEC = {
   version: '1.0',
   meta: { required: ['template_id', 'version'], optional: ['title', 'hospital', 'department', 'unit', 'pdf_header', 'pdf_footer', 'logo'] },
   fieldTypes: {
-    text: { required: ['id'], optional: ['label', 'placeholder', 'multiline', 'required', 'pattern', 'default', 'if', 'pdf', 'ui'] },
-    number: { required: ['id'], optional: ['label', 'placeholder', 'required', 'min', 'max', 'pattern', 'default', 'if', 'pdf', 'ui'] },
+    text: { required: ['id'], optional: ['label', 'placeholder', 'multiline', 'pattern', 'required', 'default', 'if', 'pdf', 'ui'] },
+    number: { required: ['id'], optional: ['label', 'placeholder', 'min', 'max', 'pattern', 'required', 'default', 'if', 'pdf', 'ui'] },
     checkbox: { required: ['id'], optional: ['label', 'trueValue', 'falseValue', 'required', 'default', 'if', 'pdf', 'ui'] },
     date: { required: ['id'], optional: ['label', 'required', 'default', 'if', 'pdf', 'ui'] },
     select: { required: ['id'], optional: ['label', 'options', 'source', 'multiple', 'required', 'default', 'if', 'pdf', 'ui'] },
     table: { required: ['id'], optional: ['label', 'columns', 'required', 'default', 'if', 'pdf', 'ui'] },
     list: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
-    complaints: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
+    complaints: { required: ['id'], optional: ['label', 'placeholder', 'suggestions', 'required', 'default', 'if', 'pdf', 'ui'] },
     diagnosis: { required: ['id'], optional: ['label', 'placeholder', 'required', 'default', 'if', 'pdf', 'ui'] },
-    chronicdiseases: { required: ['id'], optional: ['label', 'suggestions', 'shownegatives', 'if', 'pdf', 'ui'] },
-    pastevents: { required: ['id'], optional: ['label', 'suggestions', 'if', 'pdf', 'ui'] },
+    chronicdiseases: { required: ['id'], optional: ['label', 'suggestions', 'shownegatives', 'required', 'default', 'if', 'pdf', 'ui'] },
+    pastevents: { required: ['id'], optional: ['label', 'suggestions', 'required', 'default', 'if', 'pdf', 'ui'] },
     static: { required: [], optional: ['content', 'if', 'pdf', 'ui'] },
     computed: { required: ['id', 'formula'], optional: ['label', 'format', 'if', 'pdf', 'ui'] },
     hidden: { required: ['id'], optional: ['default', 'pdf', 'ui'] },
   }
 };
 
-export function lintMCTM({ source, ast, meta }) {
+export function lintMCTM({ source, ast, meta, overrides = [] }) {
   const diagnostics = [];
   const lines = source.split(/\r?\n/);
 
@@ -30,7 +30,25 @@ export function lintMCTM({ source, ast, meta }) {
     if (!meta[key]) diagnostics.push(err(`Missing required meta: ${key}`, findMetaLine(lines, key) || 1));
   });
 
-  // 2. Duplicate IDs (fields only for now)
+  // 2. Overrides
+  if (overrides && overrides.length) {
+    overrides.forEach(ov => {
+      if (!ov || !ov.target) return;
+      const parts = ov.target.split('.');
+      const id = parts.shift();
+      const fieldNode = findFieldById(ast, id);
+      if (!fieldNode) {
+        diagnostics.push(warn(`Override references unknown field '${id}'`, ov.line || 1));
+        return;
+      }
+      if (fieldNode.type !== 'field') {
+        diagnostics.push(warn(`Override target '${id}' is not a field`, ov.line || fieldNode.line));
+        return;
+      }
+    });
+  }
+
+  // 3. Duplicate IDs (fields only for now)
   const idCount = new Map();
   walkNodes(ast, node => {
     if (node && node.type === 'field' && node.id) {
@@ -40,7 +58,7 @@ export function lintMCTM({ source, ast, meta }) {
     }
   });
 
-  // 3. Unknown field types from raw source fences
+  // 4. Unknown field types from raw source fences
   const knownTypes = new Set([...Object.keys(MCTM_SPEC.fieldTypes), 'include']);
   lines.forEach((ln, idx) => {
     const f = /^@([a-z][a-z0-9-]*)/i.exec(ln.trim());
@@ -51,7 +69,7 @@ export function lintMCTM({ source, ast, meta }) {
     }
   });
 
-  // 4. Sections/groups basic checks
+  // 5. Sections/groups basic checks
   ast.filter(n => n.type === 'section').forEach(sec => {
     if (!sec.children.length) diagnostics.push(warn(`Empty section: ${sec.title}`, sec.line));
     if (sec.if) validateConditionRefs(sec, idCount, diagnostics);
@@ -64,7 +82,7 @@ export function lintMCTM({ source, ast, meta }) {
     }
   });
 
-  // 5. Required props per field
+  // 6. Required props per field
   walkNodes(ast, node => {
     if (!node || node.type !== 'field') return;
     const spec = MCTM_SPEC.fieldTypes[node.fieldType];
@@ -104,7 +122,7 @@ export function lintMCTM({ source, ast, meta }) {
     if (node.if) validateConditionRefs(node, idCount, diagnostics);
   });
 
-  // 6. Includes sanity
+  // 7. Includes sanity
   walkNodes(ast, node => {
     if (node && node.type === 'include') {
       if (!node.template) diagnostics.push(err(`include missing 'template' property`, node.line));
@@ -117,7 +135,7 @@ export function lintMCTM({ source, ast, meta }) {
 
 export function parseAndLintMCTM(source) {
   const parsed = parseMCTM(source);
-  const diagnostics = lintMCTM({ source, ast: parsed.ast, meta: parsed.meta });
+  const diagnostics = lintMCTM({ source, ast: parsed.ast, meta: parsed.meta, overrides: parsed.overrides });
   return { ...parsed, diagnostics };
 }
 
@@ -146,6 +164,12 @@ function findMetaLine(lines, key) {
 function err(message, line) { return { level: 'error', message, line }; }
 function warn(message, line) { return { level: 'warning', message, line }; }
 function severityRank(d) { return d.level === 'error' ? 0 : 1; }
+
+function findFieldById(ast, id) {
+  let found = null;
+  walkNodes(ast, node => { if (!found && node.type === 'field' && node.id === id) found = node; });
+  return found;
+}
 
 function validateConditionRefs(node, idCount, diagnostics) {
   const cond = node.if; if (!cond) return;

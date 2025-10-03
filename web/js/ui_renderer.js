@@ -64,10 +64,6 @@ function renderSection(node, state, { hideUI = false, renderChildrenUI = true, c
 
     const headerRow = document.createElement('div');
     headerRow.className = 'section-header-row';
-    const h = document.createElement('h1');
-    h.textContent = node.title || '';
-    h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
-    headerRow.appendChild(h);
 
     let checkbox = null;
     if (node.optional === true) {
@@ -78,7 +74,20 @@ function renderSection(node, state, { hideUI = false, renderChildrenUI = true, c
         const initial = (prev ? prev.checked : (node.default === false ? false : true));
         checkbox.checked = initial;
         headerRow.appendChild(checkbox);
+
+        const syncBody = () => {
+            sectionEl.classList.toggle('disabled', !checkbox.checked);
+        };
+        checkbox.addEventListener('change', syncBody);
+        syncBody();
+        if (node.id) state.sectionOptionals[node.id] = checkbox;
     }
+
+    const h = document.createElement('h1');
+    h.textContent = node.title || '';
+    h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
+    headerRow.appendChild(h);
+
     sectionEl.appendChild(headerRow);
 
     const body = document.createElement('div');
@@ -90,12 +99,6 @@ function renderSection(node, state, { hideUI = false, renderChildrenUI = true, c
     }
     sectionEl.appendChild(body);
 
-    if (checkbox) {
-        const syncBody = () => { body.style.display = checkbox.checked ? '' : 'none'; };
-        checkbox.addEventListener('change', syncBody);
-        syncBody();
-        if (node.id) state.sectionOptionals[node.id] = checkbox;
-    }
     return sectionEl;
 }
 

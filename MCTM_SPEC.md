@@ -120,7 +120,7 @@ Containers (sections, groups) accept the same flags; descendant inheritance for 
 The following types are recognized by this spec. Unknown types SHOULD be tolerated by tooling (emit warnings rather than errors) for forward compatibility.
 
 | Type | Required | Common Optional | Notes |
-|------|----------|------------------|-------|
+|------|----------|------------------------------------------------------------|-------|
 | text | id | label, placeholder, multiline, pattern, required, default, if, pdf.hidden, ui.hidden | Single/multi-line text input |
 | number | id | label, placeholder, min, max, pattern, required, default, if, pdf.hidden, ui.hidden | Numeric input |
 | checkbox | id | label, trueValue, falseValue, required, default, if, pdf.hidden, ui.hidden | Boolean input |
@@ -128,15 +128,18 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 | select | id | label, options, source, multiple, required, default, if, pdf.hidden, ui.hidden | Inline `options:[A,B,C]` or external `source:<path>` |
 | table | id | label, columns, required, default, if, pdf.hidden, ui.hidden | Dynamic rows per column |
 | list | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | Simple repeating free-text list |
-| complaints | id | label, required, default, if, pdf.hidden, ui.hidden | Complaints widget |
+| complaints | id | label, placeholder, suggestions, required, default, if, pdf.hidden, ui.hidden | Complaints widget |
 | diagnosis | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | ICD search/entry |
-| chronicdiseases | id | label, suggestions, shownegatives, if, pdf.hidden, ui.hidden | Structured chronic disease list (disease, duration, unit, treatment) |
-| pastevents | id | label, suggestions, if, pdf.hidden, ui.hidden | Past medical/surgical events list |
-| static | (none) | if, pdf.hidden, ui.hidden | Body preserved as `content` |
+| chronicdiseases | id | label, suggestions, shownegatives, required, default, if, pdf.hidden, ui.hidden | Structured chronic disease list (disease, duration, unit, treatment) |
+| pastevents | id | label, suggestions, required, default, if, pdf.hidden, ui.hidden | Past medical/surgical events list |
+| static | (none) | content, if, pdf.hidden, ui.hidden | Body preserved as `content` (content shown when present) |
 | computed | id, formula | label, format, if, pdf.hidden, ui.hidden | Expression evaluated at runtime |
 | hidden | id | default, pdf.hidden (implicit), ui.hidden | Hidden value (always omitted from PDF) |
 
-### 7.4 Include Directive (Parse-Time Expansion)
+Notes:
+- Array based properties MAY be specified as `prop:[A,B,C]` (without spaces) or as a quoted array string `prop:"[A, B, C]"`. Both parse equivalently.
+
+## 8. Include Directive (Parse-Time Expansion)
 
 Includes allow re-use of parts (section / group / field) defined in another template.
 
@@ -168,7 +171,49 @@ Example group re-use:
 @include template:"templates/vitals.mctm" id:vitals_group @
 ```
 
-### 7.5 Groups
+## 9. Overrides Block
+
+The overrides block lets a template (or a template that includes another) modify existing field properties or defaults without redefining the field. This is applied AFTER include expansion so imported fields can be customized.
+
+Syntax delimiters use hash-prefixed directives (line-oriented):
+
+```
+#overrides
+field_id: "New default value"               // Overrides a field's default (or content for static fields)
+field_id.suggestions: [A, B, C]             // Replace suggestions array
+field_id.label: "Alternate Label"           // Replace simple property
+field_id.pdf.hidden: true                   // Namespaced property override (pdf/ui currently supported)
+another_field: """Multi-line
+text value"""                               // Multi-line quoted string (closing quote ends capture)
+#end
+```
+
+Rules:
+1. Each non-empty line between `#overrides` and `#end` must be an assignment `target: value`.
+2. `target` forms:
+  - `field_id` -> sets `default` (or `content` for `static` fields).
+  - `field_id.prop` -> sets direct property `prop`.
+  - `field_id.ns.prop` -> sets namespaced property (currently `pdf` or `ui`).
+3. Array literal: `[a, b, c]` becomes an array of strings (whitespace around commas ignored).
+4. Quoted strings may span multiple lines until a matching closing quote character.
+5. Overrides referencing unknown field ids emit a linter WARNING (not an error).
+6. Later overrides for the same target replace earlier ones (last-wins ordering).
+7. Values are not type-coerced beyond array and boolean (`true`/`false`) detection consistent with general property parsing.
+
+Linter behavior:
+- Warns on unknown field ids: `Override references unknown field 'foo'`.
+- Warns if the target id resolves to a non-field node (e.g., a section/group).
+
+Example (customizing an included complaints field):
+```
+#overrides
+chief_complaints.suggestions: [Fever, Cough with expectoration, Wheeze]
+#end
+```
+
+After parsing this will replace the `suggestions` property for the `chief_complaints` field; UI components reading that property will reflect the new list.
+
+## 10. Groups
 
 Groups provide structural & layout control inside sections or other groups.
 
@@ -200,15 +245,11 @@ Diagnostics:
 - Unknown layout -> warning (treated as `vstack`).
 - Empty group -> warning.
 
-Notes:
-- `select.options` and `table.columns` MAY be specified as `options:[A,B,C]` (without spaces) or as a quoted array string `options:"[A, B, C]"`. Both parse equivalently.
-
-## 8. Static Paragraphs
-
+## 11. Static Paragraphs
 
 Any non-empty line not part of a field fence, metadata block, or section heading starts a paragraph captured as a `static` node. Lines are aggregated until a blank line or the next special construct.
 
-## 9. Conditional Visibility (`if:`)
+## 12. Conditional Visibility (`if:`)
 
 Use `if:` to conditionally include a section, group, or field. The expression is a single binary comparison:
 
@@ -230,16 +271,16 @@ Limitations:
 - Only a single comparison is supported (no logical `and`/`or`).
 - For relational operators, numbers and ISO-like dates are compared numerically/chronologically; other values fall back to case-insensitive string comparison.
 
-## 10. Computed Fields
+## 13. Computed Fields
 
 `@computed` fields MUST provide `id` and `formula`.
 
 - `formula:<jsExpr>` - a JavaScript expression evaluated with a proxy mapping field IDs to their values.
 - `format:decimal(n)` MAY be specified to round numeric results to `n` decimal places.
 
-Security note: See §14 regarding evaluation.
+Security note: See §17 regarding evaluation.
 
-## 11. Validation and Diagnostics
+## 14. Validation and Diagnostics
 
 Implementations SHOULD provide validation and surface diagnostics as follows.
 
@@ -259,7 +300,7 @@ Warnings (template MAY still render):
 - Formula evaluation failure.
 - `if:` expression referencing an unknown field.
 
-### 11.1 Diagnostic Shape
+### 14.1 Diagnostic Shape
 
 ```
 {
@@ -269,7 +310,7 @@ Warnings (template MAY still render):
 }
 ```
 
-## 12. Output and Export Behavior
+## 15. Output and Export Behavior
 
 This section clarifies how fields are rendered in the UI and included in the final exported PDF.
 
@@ -298,7 +339,7 @@ PDF inclusion guidelines:
 
 Markdown support in PDF (baseline): bold `**text**`, italic `*text*`, simple unordered/ordered lists, blank-line paragraph breaks.
 
-## 13. Grammar (EBNF)
+## 16. Grammar (EBNF)
 
 ```
 MCTM              := VersionDirective? MetaBlock Node*
@@ -331,66 +372,20 @@ Unquoted          := /[^\s\]]+/
 // * 'part:' is accepted as an alias of 'id:' within include blocks
 ```
 
-## 14. Security Considerations
+## 17. Security Considerations
 
 Computed `formula` values MAY be evaluated using JavaScript `Function` or similar mechanisms. Implementations SHOULD:
 - Restrict the evaluation context to field values only.
 - Avoid evaluating untrusted templates without sandboxing.
 - Consider timeouts and error handling for long-running or failing formulas.
 
-## 15. Versioning and Extensibility
+## 18. Versioning and Extensibility
 
 - Breaking syntax changes MUST increment the major version in the `@mctm <major.minor>` directive.
 - Parsers SHOULD accept documents without a version directive by assuming the highest compatible version.
 - New field types MAY be introduced; unknown types SHOULD produce a linter warning but MUST NOT halt parsing.
 
-## 16. Minimal Example (v1.0 features)
-
-```
-@mctm 1.0
----
-template_id: discharge_base
-title: "Discharge Summary"
-version: 1
-department: General Medicine
-pdf_header: "Hospital Name - Discharge Summary"
-pdf_footer: "For clinical use"
----
-
-> "Demographics"
-@text id:patient_name label:"Name" required @
-@number id:patient_age label:"Age" min:0 max:120 @
-@select id:patient_sex label:"Sex" options:[Male,Female,Other] required @
-
-> "Vitals & Stay"
-{ "Vitals" id:vitals layout:columns-2
-  @number id:pulse label:"Pulse (/min)" @
-  @text id:bp label:"BP (mmHg)" @
-  @number id:rr label:"Resp Rate" @
-}
-@date id:date_admission label:"Admission Date" @
-@date id:date_discharge label:"Discharge Date" @
-@computed id:stay_days label:"Duration of Stay (days)" formula:"((new Date(date_discharge)-new Date(date_admission))/(1000*60*60*24))" format:decimal(0) @
-
-> "Menstrual History" if:patient_sex==Female optional default:false
-@static
-Applies only to female patients.
-@
-
-@text id:internal_note label:"Internal Note" multiline pdf.hidden:true @
-
-{ "Chronic Conditions" layout:vstack
-  @chronicdiseases id:chronic label:"Chronic Diseases" shownegatives suggestions:[Diabetes%20Mellitus,Systemic%20Hypertension] @
-}
-
-{ "Past Events" layout:vstack
-  @pastevents id:past_events label:"Past Events" @
-}
-
-@include template:"templates/common.mctm" id:discharge_advice @
-```
-
-## 17. Appendix: Field Type & Structural Quick Reference (informative)
+## 19. Appendix: Field Type & Structural Quick Reference (informative)
 
 - text: general-purpose single/multi-line input; supports `multiline`.
 - number: numeric input with optional `min`/`max`.

@@ -16,6 +16,7 @@ export function getKnownChronicDiseases() {
 
 export function getKnownPastEvents() {
     return [
+        'Similar Illness',
         'Surgery',
         'Hospitalization',
         'Blood Transfusion',

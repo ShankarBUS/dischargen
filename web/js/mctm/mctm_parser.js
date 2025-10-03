@@ -2,7 +2,9 @@ export function parseMCTM(source) {
   const lines = source.split(/\r?\n/);
   const ast = [];
   const meta = {};
+  const overrides = [];
   let i = 0; let metaParsed = false;
+  let overrideBlockActive = false;
   let currentSection = null;
   // A stack of containers to support nested groups. Each item is { container: Array }
   const containerStack = [];
@@ -26,6 +28,47 @@ export function parseMCTM(source) {
     let line = lines[i] ?? '';
     // Comments (start with //)
     if (/^\s*(\/\/)/.test(line)) { i++; continue; }
+
+    // Overrides block start: #overrides (single or multiple allowed)
+    if (/^\s*#overrides\b/i.test(line)) { overrideBlockActive = true; i++; continue; }
+
+    // Overrides block end: #end
+    if (overrideBlockActive && /^\s*#end\b/i.test(line)) { overrideBlockActive = false; i++; continue; }
+
+    if (overrideBlockActive) {
+      // Parse assignment lines: field[.prop[.sub]]: value  (allow multiline quoted strings)
+      if (line.trim() === '') { i++; continue; }
+      const assign = /^\s*([A-Za-z_][\w.-]*)\s*:\s*(.*)$/.exec(line);
+      if (assign) {
+        const target = assign[1].trim();
+        let valRaw = assign[2];
+        const ovLine = i + 1;
+        // Multiline quoted string support
+        if (/^['"]/.test(valRaw) && !/(['"])\s*$/.test(valRaw)) {
+          const q = valRaw[0];
+          // accumulate until closing quote
+          while (++i < lines.length) {
+            valRaw += '\n' + lines[i];
+            if (new RegExp(`${q}\\s*$`).test(lines[i]) && lines[i].slice(-1) === q) break;
+          }
+        }
+        let value = valRaw.trim();
+        // Remove surrounding quotes (may span lines)
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        // Array syntax like [a, b, c]
+        if (value.startsWith('[') && value.endsWith(']')) {
+          const inner = value.slice(1, -1).trim();
+          if (inner) {
+            value = inner.split(',').map(s => stripQuotes(s.trim()));
+          } else value = [];
+        }
+        overrides.push({ target, value, line: ovLine });
+      }
+      i++; continue;
+    }
+
     // Metadata blocks (start and end with ---)
     if (!metaParsed && /^\s*---\s*$/.test(line)) {
       i++;
@@ -45,9 +88,9 @@ export function parseMCTM(source) {
       const startLine = i + 1;
       const { title, props } = parseTitleAndProps(secMatch[1]);
       const section = { type: 'section', title, children: [], line: startLine, ...props };
-  if (!section.id && section.title) section.id = slugify(section.title);
-  // Ensure optional property is boolean if present
-  if (section.optional !== undefined) section.optional = !!section.optional;
+      if (!section.id && section.title) section.id = 'section_' + slugify(section.title);
+      // Ensure optional property is boolean if present
+      if (section.optional !== undefined) section.optional = !!section.optional;
       ast.push(section);
       currentSection = section;
       i++; continue;
@@ -60,7 +103,7 @@ export function parseMCTM(source) {
       const header = grpOpen[1] || '';
       const { title, props } = parseTitleAndProps(header);
       const group = { type: 'group', title, children: [], line: startLine, ...props };
-      if (!group.id && group.title) group.id = slugify(group.title);
+      if (!group.id && group.title) group.id = 'group_' + slugify(group.title);
       getActiveContainer().push(group);
       // Push this group's children container on the stack
       containerStack.push({ container: group.children });
@@ -126,7 +169,7 @@ export function parseMCTM(source) {
     }
     i++;
   }
-  return { meta, ast };
+  return { meta, overrides, ast };
 }
 
 function parseProps(chunk) {
@@ -135,7 +178,7 @@ function parseProps(chunk) {
   const obj = {};
   const tokens = tokenize(chunk);
 
-  const nsTargets = new Set(['pdf','ui']);
+  const nsTargets = new Set(['pdf', 'ui']);
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
@@ -160,13 +203,13 @@ function parseProps(chunk) {
         const inner = val.slice(1, -1).trim();
         if (inner) {
           // Split on commas with trimming;
-            const parts = inner.split(',');
-            const arr = new Array(parts.length);
-            for (let j = 0; j < parts.length; j++) {
-              const raw = stripQuotes(parts[j].trim());
-              arr[j] = decodeURIComponent(raw);
-            }
-            val = arr;
+          const parts = inner.split(',');
+          const arr = new Array(parts.length);
+          for (let j = 0; j < parts.length; j++) {
+            const raw = stripQuotes(parts[j].trim());
+            arr[j] = decodeURIComponent(raw);
+          }
+          val = arr;
         } else {
           val = [];
         }
@@ -260,7 +303,6 @@ function parseTitleAndProps(rest) {
     }
   }
   const props = parseProps(propsStr);
-  if (!props.id && title) props.id = slugify(title);
   return { title, props };
 }
 
@@ -367,6 +409,35 @@ export async function parseMCTMResolved(source, options = {}) {
   }
 
   await expandIncludesInArray(parsed.ast, true);
+
+  // Apply overrides
+  if (parsed.overrides && parsed.overrides.length) {
+    for (const ov of parsed.overrides) {
+      if (!ov || !ov.target) continue;
+      const parts = ov.target.split('.');
+      const _id = parts.shift();
+      const _node = findPartById(parsed.ast, _id);
+      if (!_node || _node.type !== 'field') continue;
+
+      // Override field value (default/content)
+      if (!parts.length) {
+        if (_node.fieldType === 'static') _node.content = ov.value;
+        else _node.default = ov.value;
+      } else {
+        // property override (support one level namespacing like pdf.hidden)
+        if (parts.length === 2 && (parts[0] === 'pdf' || parts[0] === 'ui')) {
+          const ns = parts[0];
+          const prop = parts[1];
+          if (!_node[ns] || typeof _node[ns] !== 'object') _node[ns] = {};
+          _node[ns][prop] = ov.value;
+        } else {
+          const propName = parts.join('.');
+          _node[propName] = ov.value;
+        }
+      }
+    }
+  }
+
   return parsed;
 }
 
