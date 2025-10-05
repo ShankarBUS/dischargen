@@ -20,7 +20,6 @@ const stepBackBtn = document.getElementById('stepBackButton');
 const stepNextBtn = document.getElementById('stepNextButton');
 const deptListEl = document.getElementById('deptList');
 const templateListEl = document.getElementById('templateList');
-// const currentDeptLabel = document.getElementById('currentDeptLabel');
 
 const settingsBtn = document.getElementById('settingsBtn');
 const sectionNavList = document.getElementById('sectionNavList');
@@ -33,6 +32,9 @@ const pdfPrintBtn = document.getElementById('pdfPrintBtn');
 const pdfDownloadBtn = document.getElementById('pdfDownloadBtn');
 
 const state = { meta: {}, ast: [], fieldRefs: {}, catalogsCache: {}, autosaveKey: 'dischargen_autosave_v1', computed: [] };
+
+// Feature flags / temporary toggles
+const DISABLE_LANDING_UI = true; // Temporarily bypass landing/start flow and load a default template directly
 
 const THEME_STORAGE_KEY = 'dischargen_theme_v1';
 const prefersDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: false, addEventListener: () => { } };
@@ -528,6 +530,21 @@ async function init() {
   departments = await loadDepartments();
   updateNav();
   document.documentElement.style.scrollPaddingTop = (document.getElementById('header')?.offsetHeight || 0) + 'px';
+  if (DISABLE_LANDING_UI) {
+    try {
+      await loadTemplateRegistry();
+      // Prefer a template marked as default, else first available
+      const chosen = templateRegistry.find(t => t.default) || templateRegistry[0];
+      if (chosen) {
+        await loadTemplateById(chosen.id);
+        landingScreen?.classList.add('hidden');
+      } else {
+        console.warn('No templates available to auto-load');
+      }
+    } catch (e) {
+      console.warn('Failed to auto-load template while landing UI disabled', e);
+    }
+  }
 }
 
 init();

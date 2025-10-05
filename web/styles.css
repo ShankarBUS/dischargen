@@ -23,6 +23,7 @@
     --c-accent: var(--brand-primary);
     --c-accent-rgb: 0 100 0;
     --c-accent-soft: rgba(var(--c-accent-rgb)/0.12);
+    --c-highlight: rgba(var(--c-accent-rgb)/0.25);
     --c-danger: #dc2626;
     --c-warn: #d97706;
     --c-success: #15803d;
@@ -110,6 +111,7 @@
     --c-accent: var(--brand-primary);
     --c-accent-rgb: 154 205 50;
     --c-accent-soft: rgba(var(--c-accent-rgb)/0.22);
+    --c-highlight: rgba(var(--c-accent-rgb)/0.35);
     --c-danger: #f87171;
     --c-warn: #fbbf24;
     --c-success: #34d399;
@@ -143,6 +145,7 @@
         --c-accent-rgb: 154 205 50;
         --c-accent-alt: #7fb521;
         --c-accent-soft: rgba(var(--c-accent-rgb)/0.22);
+        --c-highlight: rgba(var(--c-accent-rgb)/0.35);
         --c-danger: #f87171;
         --c-warn: #fbbf24;
         --c-success: #34d399;
@@ -507,21 +510,18 @@ footer {
 
 .section-header-row h1::after {
     content: '';
+    width: 24px;
+    height: 24px;
+    transition: transform var(--t-med) ease-in-out;
+    background: currentColor;
+    mask: url("assets/icons/chevron-down.svg");
     position: absolute;
     right: 0;
-    top: 50%;
-    width: .75rem;
-    height: .75rem;
-    border: 2px solid currentColor;
-    border-left: none;
-    border-top: none;
-    transform: translateY(-75%) rotate(45deg);
-    transition: transform var(--t-med) ease-in-out;
-    opacity: .7;
+    align-self: center;
 }
 
 .section.collapsed .section-header-row h1::after {
-    transform: translateY(-25%) rotate(-135deg);
+    transform: rotate(180deg);
 }
 
 .section.disabled .section-header-row h1::after {
@@ -674,6 +674,84 @@ input[type=number] {
 textarea {
     width: 100%;
     resize: vertical;
+    field-sizing: content;
+}
+
+select {
+    display: flex;
+    appearance: base-select;
+    justify-content: space-between;
+    align-items: center;
+
+    &::picker-icon {
+        content: '';
+        width: 24px;
+        height: 24px;
+        transition: transform var(--t-med) ease-in-out;
+        background: currentColor;
+        mask: url("assets/icons/chevron-down.svg");
+    }
+
+    &:open::picker-icon {
+        transform: rotate(180deg);
+    }
+
+    &::picker(select) {
+        appearance: base-select;
+        border: 1px solid var(--c-border);
+        padding: 0px;
+        border-radius: var(--radius-md);
+        background: var(--c-surface);
+        box-shadow: var(--shadow-lg);
+        max-height: 270px;
+        overflow-y: auto;
+        transition: all var(--t-med) allow-discrete;
+        top: calc(anchor(bottom) + 1px);
+        justify-self: anchor-center;
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    &::picker(select):popover-open {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    @starting-style {
+        &::picker(select):popover-open {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+    }
+
+    option {
+        padding: .5rem .75rem;
+        font-size: var(--fs-3);
+        cursor: pointer;
+        display: flex;
+        gap: var(--space-3);
+        align-items: center;
+        line-height: 1.2;
+        transition: background var(--t-fast), color var(--t-fast);
+        color: var(--c-text);
+
+        &::checkmark {
+            display: none;
+        }
+    }
+
+    option:hover {
+        background: var(--c-accent-soft);
+    }
+
+    option:focus,
+    option[selected] {
+        background: var(--c-highlight);
+    }
+
+    option:focus {
+        outline: none;
+    }
 }
 
 input:focus,
@@ -682,13 +760,6 @@ select:focus {
     outline: none;
     border-color: var(--c-accent);
     box-shadow: var(--focus-ring);
-}
-
-input[type=radio] {
-    accent-color: var(--c-accent);
-    width: 1.05rem;
-    height: 1.05rem;
-    cursor: pointer;
 }
 
 input[aria-invalid=true],
@@ -808,7 +879,7 @@ button[disabled] {
 
 [popover].ac-popover {
     border: 1px solid var(--c-border);
-    padding: var(--space-1) 0;
+    padding: 0px;
     border-radius: var(--radius-md);
     background: var(--c-surface);
     box-shadow: var(--shadow-lg);
@@ -821,6 +892,21 @@ button[disabled] {
     width: anchor-size(width);
     position-try-fallbacks: top left;
     position-try-order: most-width;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all var(--t-med) allow-discrete;
+
+    &:popover-open {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    @starting-style {
+        &:popover-open {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+    }
 
     & div {
         color: var(--c-text);
@@ -830,14 +916,17 @@ button[disabled] {
         display: flex;
         gap: var(--space-3);
         justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
         line-height: 1.2;
         transition: background var(--t-fast), color var(--t-fast);
     }
 
-    & div:hover,
-    & div.active {
+    & div:hover {
         background: var(--c-accent-soft);
+    }
+
+    & div.active {
+        background: var(--c-highlight);
     }
 }
 

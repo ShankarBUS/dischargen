@@ -327,7 +327,7 @@ function safeEvalCondition(expr, getValue) {
 }
 
 async function loadImageAsDataUrl(url) {
-  const res = await fetch(url, { mode: 'cors' });
+  const res = await fetch('assets/' + url, { mode: 'cors' });
   if (!res.ok) throw new Error('Image load failed: ' + url);
   const blob = await res.blob();
   return new Promise((resolve, reject) => {
