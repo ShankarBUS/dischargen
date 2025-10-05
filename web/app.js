@@ -8,8 +8,22 @@ import { loadDepartments } from './js/search_handler.js';
 const formContainer = document.getElementById('formContainer');
 const jsonBtn = document.getElementById('jsonBtn');
 const pdfBtn = document.getElementById('pdfBtn');
-const templatesBtn = document.getElementById('templatesBtn');
+const headerNewDischargeBtn = document.getElementById('headerNewDischargeBtn');
+
+const landingScreen = document.getElementById('landing');
+const newDischargeBtn = document.getElementById('newDischargeBtn');
+const pinInput = document.getElementById('pinInput');
+const stepPin = document.getElementById('stepPin');
+const stepTemplate = document.getElementById('stepTemplate');
+const templateFilterInput = document.getElementById('templateFilterInput');
+const stepBackBtn = document.getElementById('stepBackButton');
+const stepNextBtn = document.getElementById('stepNextButton');
+const deptListEl = document.getElementById('deptList');
+const templateListEl = document.getElementById('templateList');
+// const currentDeptLabel = document.getElementById('currentDeptLabel');
+
 const settingsBtn = document.getElementById('settingsBtn');
+const sectionNavList = document.getElementById('sectionNavList');
 
 const jsonPreview = document.getElementById('jsonPreview');
 const copyJsonBtn = document.getElementById('copyJsonBtn');
@@ -17,11 +31,9 @@ const downloadJsonBtn = document.getElementById('downloadJsonBtn');
 const pdfPreviewBtn = document.getElementById('pdfPreviewBtn');
 const pdfPrintBtn = document.getElementById('pdfPrintBtn');
 const pdfDownloadBtn = document.getElementById('pdfDownloadBtn');
-const templatesTree = document.getElementById('templatesTree');
 
-const state = { meta: {}, ast: [], fieldRefs: {}, catalogsCache: {}, autosaveKey: 'discharge_autosave_v1', computed: [] };
+const state = { meta: {}, ast: [], fieldRefs: {}, catalogsCache: {}, autosaveKey: 'dischargen_autosave_v1', computed: [] };
 
-// ----- Theme handling -----
 const THEME_STORAGE_KEY = 'dischargen_theme_v1';
 const prefersDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: false, addEventListener: () => { } };
 
@@ -63,16 +75,14 @@ function initTheme() {
 let templateRegistry = [];
 let departments = [];
 async function loadTemplateRegistry() {
+  if (templateRegistry.length) return templateRegistry;
   try {
     const res = await fetch('templates/templates.json');
     templateRegistry = await res.json();
-
-    // Auto load default template
-    const def = templateRegistry.find(t => t.default) || templateRegistry[0];
-    if (def) await loadTemplateById(def.id);
   } catch (e) {
     console.error('Failed to load template registry', e);
   }
+  return templateRegistry;
 }
 
 async function loadTemplateById(id) {
@@ -84,6 +94,14 @@ async function loadTemplateById(id) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const txt = await res.text();
     await loadTemplate(txt);
+    // Set initial PIN if provided via start flow
+    if (pendingPinValue) {
+      const ref = state.fieldRefs['patient_pin'] || state.fieldRefs['pin'];
+      if (ref) {
+        try { ref.value = pendingPinValue; } catch { }
+      }
+      pendingPinValue = null;
+    }
   } catch (e) {
     console.error('Failed to load template', id, e);
   }
@@ -107,6 +125,8 @@ async function loadTemplate(text) {
     }
   } catch (e) { console.error('Lint failed', e); }
   renderUI(formContainer, state);
+  buildSectionNavigationFromState();
+  highlightActiveSection();
   restoreAutosave();
   reevaluateConditions(formContainer, state);
   evaluateComputedAll(state);
@@ -118,6 +138,7 @@ formContainer.addEventListener('input', e => {
     reevaluateConditions(formContainer, state);
     evaluateComputedAll(state);
     autosave();
+    highlightActiveSection();
   }
 });
 
@@ -141,21 +162,19 @@ function collectData() {
 jsonBtn.addEventListener('click', () => {
   if (!validateAll(formContainer)) { alert('Validation errors present'); return; }
   const data = collectData();
-  // Show JSON modal with content and offer copy/download
   jsonPreview.value = JSON.stringify(data, null, 2);
-  openModal('jsonModal');
+  openDialog('jsonModal');
 });
 
 pdfBtn.addEventListener('click', async () => {
   if (!validateAll(formContainer)) { alert('Validation errors present'); return; }
   const data = collectData();
-  const meta = state.meta || {};
   latestPdf = {
     docDefinition: await renderPDF(state.meta, state.ast, data),
     filename: `${data.patient_pin || 'patient'}_discharge_summary.pdf`.replace(/[^a-z0-9._-]/gi, '_')
   };
   if (!globalThis.pdfMake) { alert('PDF engine not loaded'); return; }
-  openModal('pdfModal');
+  openDialog('pdfModal');
 });
 
 function downloadFile(filename, content) {
@@ -164,30 +183,11 @@ function downloadFile(filename, content) {
   a.download = filename; a.click();
 }
 
-// Modal helpers
-function openModal(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.remove('hidden');
+// Dialog helpers
+function openDialog(id) {
+  const dlg = document.getElementById(id);
+  if (dlg instanceof HTMLDialogElement && !dlg.open) dlg.showModal();
 }
-
-function closeModal(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.add('hidden');
-}
-
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-close]');
-  if (btn) {
-    closeModal(btn.getAttribute('data-close'));
-  }
-  // click outside to close
-  const modal = e.target.closest('.modal-content');
-  if (!modal && e.target.classList && e.target.classList.contains('modal')) {
-    e.target.classList.add('hidden');
-  }
-});
 
 copyJsonBtn?.addEventListener('click', async () => {
   try {
@@ -217,77 +217,166 @@ pdfDownloadBtn?.addEventListener('click', () => {
   globalThis.pdfMake.createPdf(latestPdf.docDefinition).download(latestPdf.filename);
 });
 
-settingsBtn?.addEventListener('click', () => openModal('settingsModal'));
+settingsBtn?.addEventListener('click', () => openDialog('settingsModal'));
 
-templatesBtn?.addEventListener('click', () => {
-  buildTemplatesTree();
-  openModal('templatesModal');
+headerNewDischargeBtn?.addEventListener('click', () => {
+  startFreshDischarge();
 });
 
-function buildTemplatesTree() {
-  if (!templatesTree) return;
-  // Build map deptId -> {label, items: []}
-  const deptById = new Map();
-  departments.forEach(d => deptById.set(d.id, { label: d.label, id: d.id }));
-  const buckets = new Map();
-  templateRegistry.forEach(t => {
-    const depId = t.department_id || 'uncat';
-    if (!buckets.has(depId)) {
-      const d = deptById.get(depId);
-      buckets.set(depId, { label: d ? d.label : 'Uncategorized', id: depId, items: [] });
-    }
-    buckets.get(depId).items.push(t);
-  });
+let pendingPinValue = null;
+let startingFresh = false; // indicates we should ignore previous autosave
+let currentDeptId = null;
+let templateFilter = '';
+let currentStep = 0;
+let currentTemplateId = null;
 
-  // Render
-  templatesTree.innerHTML = '';
-  [...buckets.values()].sort((a, b) => a.label.localeCompare(b.label)).forEach(bucket => {
-    const section = document.createElement('div');
-    section.className = 'tree-section';
-    const h = document.createElement('div'); h.className = 'tree-section-title';
-    h.textContent = bucket.label;
-    section.appendChild(h);
-    const ul = document.createElement('ul');
-    ul.className = 'tree-list';
-    bucket.items.forEach(item => {
-      const li = document.createElement('li');
-      li.className = 'tree-item';
-      const name = document.createElement('span');
-      name.textContent = item.name || item.id;
-      name.className = 'tree-item-name';
-      const actions = document.createElement('span');
-      actions.className = 'tree-item-actions';
-      const loadBtn = document.createElement('button');
-      loadBtn.className = 'icon-button';
-      loadBtn.title = 'Load Template';
-      loadBtn.innerHTML =
-        `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24">
-          <g fill="currentColor">
-            <path d="M18.5 20a.5.5 0 0 1-.5.5h-5.732A6.5 6.5 0 0 1 11.19 22H18a2 2 0 0 0 2-2V9.828a2 2 0 0 0-.586-1.414l-5.829-5.828l-.049-.04l-.036-.03a2 2 0 0 0-.219-.18a1 1 0 0 0-.08-.044l-.048-.024l-.05-.029c-.054-.031-.109-.063-.166-.087a2 2 0 0 0-.624-.138q-.03-.002-.059-.007L12.172 2H6a2 2 0 0 0-2 2v7.498a6.5 6.5 0 0 1 1.5-.422V4a.5.5 0 0 1 .5-.5h6V8a2 2 0 0 0 2 2h4.5zm-5-15.379L17.378 8.5H14a.5.5 0 0 1-.5-.5z"/>
-            <path d="M12 17.5a5.5 5.5 0 1 1-11 0a5.5 5.5 0 0 1 11 0m-2.146-2.354a.5.5 0 0 0-.708 0L5.5 18.793l-1.646-1.647a.5.5 0 0 0-.708.708l2 2a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708"/>
-          </g>
-        </svg>`;
-      loadBtn.addEventListener('click', async () => { await loadTemplateById(item.id); closeModal('templatesModal'); });
-      const dlBtn = document.createElement('button');
-      dlBtn.className = 'icon-button';
-      dlBtn.title = 'Download Template';
-      dlBtn.innerHTML =
-        `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24">
-          <path fill="currentColor"
-            d="M6 2a2 2 0 0 0-2 2v7.498a6.5 6.5 0 0 1 1.5-.422V4a.5.5 0 0 1 .5-.5h6V8a2 2 0 0 0 2 2h4.5v10a.5.5 0 0 1-.5.5h-5.732A6.5 6.5 0 0 1 11.19 22H18a2 2 0 0 0 2-2V9.828a2 2 0 0 0-.586-1.414l-5.828-5.828A2 2 0 0 0 12.172 2zm11.38 6.5H14a.5.5 0 0 1-.5-.5V4.62zm-5.38 9a5.5 5.5 0 1 1-11 0a5.5 5.5 0 0 1 11 0m-5-3a.5.5 0 0 0-1 0v4.793l-1.646-1.647a.5.5 0 0 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l2.5-2.5a.5.5 0 0 0-.708-.708L7 19.293z" />
-        </svg>`;
-      dlBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch(`templates/${item.file}`);
-          const txt = await res.text();
-          downloadFile(item.file || (item.id + '.mctm'), txt);
-        } catch { }
-      });
-      actions.appendChild(loadBtn); actions.appendChild(dlBtn);
-      li.appendChild(name); li.appendChild(actions); ul.appendChild(li);
+function showStartModal() {
+  openDialog('startModal');
+  currentStep = 0;
+  stepPin.classList.remove('hidden');
+  stepTemplate.classList.add('hidden');
+  pinInput.value = '';
+  pinInput?.focus();
+  stepNextBtn.disabled = true;
+  stepBackBtn.disabled = true;
+}
+
+function startFreshDischarge() {
+  startingFresh = true;
+  showStartModal();
+}
+
+pinInput?.addEventListener('input', () => {
+  const val = pinInput.value.trim();
+  stepNextBtn.disabled = !val;
+});
+
+stepNextBtn?.addEventListener('click', async () => {
+  if (stepNextBtn.disabled) return;
+
+  if (currentStep == 0) {
+    pendingPinValue = pinInput.value.trim();
+    await ensureDepartmentLists();
+    stepPin.classList.add('hidden');
+    stepTemplate.classList.remove('hidden');
+    templateFilterInput?.focus();
+    currentStep = 1;
+    stepBackBtn.disabled = false;
+  } else if (currentStep == 1) {
+    loadTemplateById(currentTemplateId).then(() => {
+      startingFresh = false; // allow autosave for subsequent edits
+      const dlg = document.getElementById('startModal');
+      if (dlg instanceof HTMLDialogElement && dlg.open) dlg.close();
+      landingScreen?.classList.add('hidden');
     });
-    section.appendChild(ul);
-    templatesTree.appendChild(section);
+  }
+});
+
+stepBackBtn?.addEventListener('click', () => {
+  stepTemplate.classList.add('hidden');
+  stepPin.classList.remove('hidden');
+  pinInput?.focus();
+  currentStep = 0;
+  stepBackBtn.disabled = true;
+});
+
+newDischargeBtn?.addEventListener('click', () => { startFreshDischarge(); });
+
+templateFilterInput?.addEventListener('input', () => {
+  templateFilter = templateFilterInput.value.trim().toLowerCase();
+  renderTemplateList();
+});
+
+async function ensureDepartmentLists() {
+  await loadTemplateRegistry();
+  if (!currentDeptId) {
+    // pick first existing department or fallback to uncategorized
+    const first = departments.find(d => templateRegistry.some(t => (t.department_id || 'uncategorized') === d.id));
+    currentDeptId = first ? first.id : 'uncategorized';
+  }
+  renderDeptList();
+
+  if (!currentTemplateId) {
+    // pick first template in current department if any
+    const firstTemplate = templateRegistry.find(t => (t.department_id || 'uncategorized') === currentDeptId);
+    if (firstTemplate) currentTemplateId = firstTemplate.id;
+  }
+  renderTemplateList();
+}
+
+function resolveDepartmentName(id) {
+  if (id === 'uncategorized' || !id) return 'Uncategorized';
+  const d = departments.find(x => x.id === id);
+  return d ? d.label : id;
+}
+
+function renderDeptList() {
+  if (!deptListEl) return;
+  const bucketIds = new Set(templateRegistry.map(t => t.department_id || 'uncategorized'));
+  const items = [...bucketIds].map(id => ({ id, label: resolveDepartmentName(id) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  deptListEl.innerHTML = '';
+  items.forEach(it => {
+    const li = document.createElement('li');
+    li.textContent = it.label;
+    li.setAttribute('data-dept-id', it.id);
+    li.addEventListener('click', () => {
+      currentDeptId = it.id;
+      templateFilter = '';
+      if (templateFilterInput) templateFilterInput.value = '';
+      updateDeptList();
+      renderTemplateList();
+    });
+    deptListEl.appendChild(li);
+  });
+  updateDeptList();
+}
+
+function updateDeptList() {
+  if (!deptListEl) return;
+  deptListEl.childNodes.forEach(li => {
+    const id = li.getAttribute('data-dept-id');
+    li.classList.toggle('active', id === currentDeptId);
+  });
+}
+
+function renderTemplateList() {
+  if (!templateListEl) return;
+  const list = templateRegistry
+    .filter(t => (t.department_id || 'uncategorized') === currentDeptId)
+    .filter(t => !templateFilter || (t.name || t.id).toLowerCase().includes(templateFilter));
+  list.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  templateListEl.innerHTML = '';
+  list.forEach(t => {
+    const li = document.createElement('li');
+    li.textContent = t.name || t.id;
+    li.setAttribute('data-template-id', t.id);
+    if (t.default) {
+      const pill = document.createElement('span');
+      pill.className = 'template-pill';
+      pill.textContent = 'Default';
+      li.appendChild(pill);
+    }
+    li.addEventListener('click', () => {
+      currentTemplateId = t.id;
+      updateTemplateList();
+    });
+    templateListEl.appendChild(li);
+  });
+  if (!list.length) {
+    const empty = document.createElement('li');
+    empty.textContent = 'No templates';
+    empty.style.opacity = '.6';
+    templateListEl.appendChild(empty);
+  }
+  updateTemplateList();
+}
+
+function updateTemplateList() {
+  if (!templateListEl) return;
+  templateListEl.childNodes.forEach(li => {
+    const id = li.getAttribute('data-template-id');
+    li.classList.toggle('active', id === currentTemplateId);
   });
 }
 
@@ -298,6 +387,7 @@ function autosave() {
 }
 
 function restoreAutosave() {
+  if (startingFresh) return; // skip if starting a new discharge
   try {
     const raw = localStorage.getItem(state.autosaveKey); if (!raw) return;
     const data = JSON.parse(raw);
@@ -326,7 +416,118 @@ function restoreAutosave() {
   } catch (e) { }
 }
 
-initTheme();
+function buildSectionNavigationFromState() {
+  if (!sectionNavList) return;
+  sectionNavList.innerHTML = '';
+  if (!Array.isArray(state.sections)) return;
+  state.sections.forEach(sec => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#' + sec.id;
+    a.innerHTML = '<span class="dot" aria-hidden="true"></span>' + (sec.title || 'Section');
+    a.addEventListener('click', () => {
+      closeNav();
+      setTimeout(() => highlightActiveSection(), 80);
+    });
+    li.appendChild(a);
+    sectionNavList.appendChild(li);
+  });
+}
 
-departments = await loadDepartments();
-await loadTemplateRegistry();
+// Active section highlighting based on scroll position
+function highlightActiveSection() {
+  if (!sectionNavList) return;
+  const links = [...sectionNavList.querySelectorAll('a')];
+  const mid = window.scrollY + window.innerHeight * 0.25; // focus near top quarter
+  let best = null; let bestOffset = -Infinity;
+  links.forEach(l => {
+    const id = l.getAttribute('href').slice(1);
+    const sec = document.getElementById(id);
+    if (!sec) return;
+    const rect = sec.getBoundingClientRect();
+    const topY = window.scrollY + rect.top;
+    if (topY <= mid && topY > bestOffset) { best = l; bestOffset = topY; }
+  });
+  links.forEach(l => l.classList.toggle('active', l === best));
+}
+window.addEventListener('scroll', () => { highlightActiveSection(); }, { passive: true });
+
+const NAV_WIDE_BREAKPOINT = 1000; // px (sync with CSS media query)
+
+function isWide() {
+  return window.innerWidth >= NAV_WIDE_BREAKPOINT;
+}
+
+function updateNav() {
+  const nav = document.getElementById('sectionNav');
+  if (!nav) return;
+  if (isWide()) {
+    nav.setAttribute('aria-hidden', 'false');
+  } else {
+    const open = document.documentElement.classList.contains('nav-open');
+    nav.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
+}
+
+function openNav() {
+  if (isWide()) { updateNav(); return; }
+  document.documentElement.classList.add('nav-open');
+  updateNav();
+}
+
+function closeNav() {
+  if (isWide()) { updateNav(); return; }
+  document.documentElement.classList.remove('nav-open');
+  updateNav();
+}
+
+function toggleNav() {
+  if (isWide()) { return; }
+  if (document.documentElement.classList.contains('nav-open')) closeNav(); else openNav();
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target;
+  if (!target) return;
+  if (target.closest('#navMenuBtn')) { toggleNav(); return; }
+  if (!isWide()) {
+    if (target.closest('#navCloseBtn')) { closeNav(); return; }
+    // Click outside nav closes only when drawer is open
+    if (document.documentElement.classList.contains('nav-open') && !target.closest('#sectionNav')) {
+      closeNav();
+    }
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if (!isWide() && e.key === 'Escape' && document.documentElement.classList.contains('nav-open')) closeNav();
+});
+
+const navSearchInput = document.getElementById('navSearchInput');
+navSearchInput?.addEventListener('input', () => {
+  const q = navSearchInput.value.trim().toLowerCase();
+  const links = sectionNavList?.querySelectorAll('a') || [];
+  links.forEach(l => {
+    const text = l.textContent.trim().toLowerCase();
+    const match = !q || text.includes(q);
+    l.parentElement.classList.toggle('hidden', !match);
+  });
+});
+
+window.addEventListener('resize', () => {
+  if (isWide()) {
+    document.documentElement.classList.remove('nav-open');
+  }
+  updateNav();
+  document.documentElement.style.scrollPaddingTop = (document.getElementById('header')?.offsetHeight || 0) + 'px';
+});
+
+
+async function init() {
+  initTheme();
+  departments = await loadDepartments();
+  updateNav();
+  document.documentElement.style.scrollPaddingTop = (document.getElementById('header')?.offsetHeight || 0) + 'px';
+}
+
+init();

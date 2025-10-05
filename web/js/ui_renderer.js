@@ -6,8 +6,47 @@ import { applyValidation } from './validation.js';
 import { parseMarkdown, escapeHtml } from './md_parser.js';
 import { getKnownChronicDiseases, getKnownPastEvents } from './defaults.js';
 
+// Registry for modular field renderers. Each renderer receives (node, wrapper, state)
+// and must attach appropriate elements to wrapper and register value access in state.fieldRefs.
+const FIELD_RENDERERS = {
+    text(node, wrapper, state) {
+        if (node.multiline) return renderMultiLineTextField(node, wrapper, state);
+        node.fieldType = 'text'; // ensure base type
+        return renderInputField(node, wrapper, state);
+    },
+    number: renderInputField,
+    checkbox: renderInputField,
+    date: renderInputField,
+    select: renderSelectField,
+    table: renderTableField,
+    diagnosis: renderDiagnosisField,
+    complaints: renderComplaintsField,
+    list: renderListField,
+    static(node, wrapper, state) {
+        wrapper.classList.add('static-block');
+        const div = document.createElement('div');
+        div.innerHTML = renderMarkdownHtml(parseMarkdown(node.content || ''));
+        wrapper.appendChild(div);
+        state.fieldRefs[node.id || ('static_' + Math.random().toString(36).slice(2))] = { value: node.content };
+    },
+    computed(node, wrapper, state) {
+        const span = document.createElement('span');
+        span.id = node.id;
+        span.className = 'computed-value';
+        wrapper.appendChild(span);
+        state.fieldRefs[node.id] = { get value() { return span.textContent; }, set value(v) { span.textContent = v; } };
+        state.computed.push(node);
+    },
+    hidden: renderHiddenInput,
+    chronicdiseases: renderChronicDiseasesField,
+    pastevents: renderPastEventsField
+};
+
 export function renderUI(root, state) {
     if (!state.sectionOptionals) state.sectionOptionals = {};
+    // Initialize sections collection for navigation (ordered)
+    state.sections = [];
+    state._usedSectionIds = new Set();
     try {
         if (state && state.meta) {
             const metaNode = { type: 'section', title: 'Metadata', id: '__meta__', optional: false };
@@ -61,6 +100,28 @@ function renderSection(node, state, { hideUI = false, renderChildrenUI = true, c
     if (node.if) sectionEl.dataset.condition = node.if;
     if (node.pdf && node.pdf.hidden) sectionEl.dataset.pdfHidden = 'true';
     if (hideUI) sectionEl.dataset.uiHidden = 'true';
+
+    // ----- Stable DOM id generation for section navigation -----
+    let baseTitle = node.title || (node.id === '__meta__' ? 'Metadata' : 'Section');
+    const explicit = (node.id && node.id !== '__meta__') ? node.id : null;
+    const slugFrom = explicit || baseTitle;
+    let slug = String(slugFrom).toLowerCase().trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 50) || 'section';
+    if (slug === '__meta__') slug = 'metadata';
+    let unique = slug;
+    let i = 2;
+    while (state._usedSectionIds.has(unique)) {
+        unique = slug + '-' + i++;
+    }
+    state._usedSectionIds.add(unique);
+    sectionEl.id = unique;
+
+    // Track for navigation (exclude hidden UI sections)
+    if (!hideUI) {
+        state.sections.push({ id: unique, title: baseTitle, optional: !!node.optional });
+    }
 
     const headerRow = document.createElement('div');
     headerRow.className = 'section-header-row';
@@ -220,49 +281,25 @@ function renderField(node, state) {
     const wrapper = document.createElement('div');
     wrapper.className = 'form-row';
     wrapper.dataset.fieldId = node.id;
+    wrapper.dataset.fieldType = node.fieldType;
     if (node.if) wrapper.dataset.condition = node.if;
     if (node.label) {
         const label = document.createElement('label');
         label.textContent = node.label;
         label.htmlFor = node.id;
+        if (node.required) label.classList.add('required');
         wrapper.appendChild(label);
     }
 
-    if ((node.fieldType === 'text' && node.multiline !== true) || node.fieldType === 'number' ||
-        node.fieldType === 'checkbox' || node.fieldType === 'date') {
-        renderInputField(node, wrapper, state);
-    } else if (node.fieldType === 'text' && node.multiline === true) {
-        renderMultiLineTextField(node, wrapper, state);
-    } else if (node.fieldType === 'select') {
-        renderSelectField(node, wrapper, state);
-    } else if (node.fieldType === 'table') {
-        renderTableField(node, wrapper, state);
-    } else if (node.fieldType === 'diagnosis') {
-        renderDiagnosisField(node, wrapper, state);
-    } else if (node.fieldType === 'complaints') {
-        renderComplaintsField(node, wrapper, state);
-    } else if (node.fieldType === 'list') {
-        renderListField(node, wrapper, state);
-    } else if (node.fieldType === 'static') {
-        wrapper.classList.add('static-block');
-        const div = document.createElement('div');
-        div.innerHTML = renderMarkdownHtml(parseMarkdown(node.content || ''));
-        wrapper.appendChild(div);
-        state.fieldRefs[node.id || ('static_' + Math.random().toString(36).slice(2))] = { value: node.content };
-    } else if (node.fieldType === 'computed') {
-        const span = document.createElement('span');
-        span.id = node.id;
-        span.className = 'computed-value';
-        wrapper.appendChild(span);
-        state.fieldRefs[node.id] = { get value() { return span.textContent; }, set value(v) { span.textContent = v; } };
-        state.computed.push(node);
-    } else if (node.fieldType === 'hidden') {
-        renderHiddenInput(node, wrapper, state);
-    } else if (node.fieldType === 'chronicdiseases') {
-        renderChronicDiseasesField(node, wrapper, state);
-    } else if (node.fieldType === 'pastevents') {
-        renderPastEventsField(node, wrapper, state);
+    // Choose renderer
+    const type = node.fieldType;
+    const renderer = FIELD_RENDERERS[type];
+    if (renderer) renderer(node, wrapper, state);
+    else {
+        // Fallback to basic text input to avoid losing data unexpectedly
+        renderInputField({ ...node, fieldType: 'text' }, wrapper, state);
     }
+    // Legacy commented block preserved for reference
     // else if (node.fieldType === 'personal-history') {
     //     const title = document.createElement('label'); title.textContent = node.label || 'Personal History'; wrapper.appendChild(title);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
