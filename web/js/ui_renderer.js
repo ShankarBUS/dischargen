@@ -1,17 +1,46 @@
-import { getDepartmentById, icdSearchWithCache, searchDepartments, snomedSearchWithCache } from './search_handler.js';
-import { AutoCompleteBox } from './components/autocompletebox.js';
-import { DataEditor } from './components/dataeditor.js';
-import { evaluateCondition } from './conditional.js';
-import { applyValidation } from './validation.js';
-import { parseMarkdown, escapeHtml } from './md_parser.js';
-import { getKnownChronicDiseases, getKnownPastEvents } from './defaults.js';
+import { getDepartmentById, searchDepartments, icdSearchWithCache, snomedSearchWithCache,
+    searchDrugs, loadCatalog } from "./search_handler.js";
+import { AutoCompleteBox } from "./components/autocompletebox.js";
+import { DataEditor } from "./components/dataeditor.js";
+import "./components/quantityunit.js";
+import { evaluateCondition } from "./conditional.js";
+import { applyValidation } from "./validation.js";
+import { parseMarkdown, escapeHtml } from "./md_parser.js";
+import { getKnownChronicDiseases, getKnownPastEvents } from "./defaults.js";
+import { QuantityUnitInput } from "./components/quantityunit.js";
+
+/**
+ * Render the full UI given parsed AST + meta.
+ * @param {HTMLElement} root
+ * @param {object} state
+ */
+export function renderUI(root, state) {
+    if (!state.sectionOptionals) state.sectionOptionals = {};
+    state.sections = [];
+    state._usedSectionIds = new Set();
+    try {
+        if (state && state.meta) {
+            const metaNode = {
+                type: "section",
+                title: "Metadata",
+                id: "__meta__",
+                optional: false,
+            };
+            const metaSection = renderSection(metaNode, state, {
+                customBodyBuilder: (body) => buildMetaEditorBody(body, state),
+            });
+            if (metaSection) root.appendChild(metaSection);
+        }
+    } catch { }
+    renderNodes(state.ast || [], root, state, true);
+}
 
 // Registry for modular field renderers. Each renderer receives (node, wrapper, state)
 // and must attach appropriate elements to wrapper and register value access in state.fieldRefs.
 const FIELD_RENDERERS = {
     text(node, wrapper, state) {
         if (node.multiline) return renderMultiLineTextField(node, wrapper, state);
-        node.fieldType = 'text'; // ensure base type
+        node.fieldType = "text"; // ensure base type
         return renderInputField(node, wrapper, state);
     },
     number: renderInputField,
@@ -23,71 +52,78 @@ const FIELD_RENDERERS = {
     complaints: renderComplaintsField,
     list: renderListField,
     static(node, wrapper, state) {
-        wrapper.classList.add('static-block');
-        const div = document.createElement('div');
-        div.innerHTML = renderMarkdownHtml(parseMarkdown(node.content || ''));
+        wrapper.classList.add("static-block");
+        const div = document.createElement("div");
+        div.innerHTML = renderMarkdownHtml(parseMarkdown(node.content || ""));
         wrapper.appendChild(div);
-        state.fieldRefs[node.id || ('static_' + Math.random().toString(36).slice(2))] = { value: node.content };
+        state.fieldRefs[
+            node.id || "static_" + Math.random().toString(36).slice(2)
+        ] = { value: node.content };
     },
     computed(node, wrapper, state) {
-        const span = document.createElement('span');
+        const span = document.createElement("span");
         span.id = node.id;
-        span.className = 'computed-value';
+        span.className = "computed-value";
         wrapper.appendChild(span);
-        state.fieldRefs[node.id] = { get value() { return span.textContent; }, set value(v) { span.textContent = v; } };
+        state.fieldRefs[node.id] = {
+            get value() {
+                return span.textContent;
+            },
+            set value(v) {
+                span.textContent = v;
+            },
+        };
         state.computed.push(node);
     },
     hidden: renderHiddenInput,
     chronicdiseases: renderChronicDiseasesField,
-    pastevents: renderPastEventsField
+    pastevents: renderPastEventsField,
+    medications: renderMedicationsField
 };
-
-export function renderUI(root, state) {
-    if (!state.sectionOptionals) state.sectionOptionals = {};
-    // Initialize sections collection for navigation (ordered)
-    state.sections = [];
-    state._usedSectionIds = new Set();
-    try {
-        if (state && state.meta) {
-            const metaNode = { type: 'section', title: 'Metadata', id: '__meta__', optional: false };
-            const metaSection = renderSection(metaNode, state, { customBodyBuilder: (body) => buildMetaEditorBody(body, state) });
-            if (metaSection) root.appendChild(metaSection);
-        }
-    } catch { }
-    renderNodes(state.ast || [], root, state, true);
-}
 
 function renderNodes(nodes, parent, state, renderUI = true) {
     for (const node of nodes) {
-        if (!node || node.type === 'include') continue;
+        if (!node || node.type === "include") continue;
         const hideUI = (node.ui && node.ui.hidden) === true;
         const nodeRenderUI = renderUI && !hideUI;
 
-        if (node.type === 'section') {
+        if (node.type === "section") {
             if (nodeRenderUI) {
-                const sectionEl = renderSection(node, state, { hideUI, renderChildrenUI: nodeRenderUI });
+                const sectionEl = renderSection(node, state, {
+                    hideUI,
+                    renderChildrenUI: nodeRenderUI,
+                });
                 if (sectionEl) parent.appendChild(sectionEl);
             } else {
-                if (node.optional === true && state.sectionOptionals[node.id]
-                    && !state.sectionOptionals[node.id].checked) {
+                if (
+                    node.optional === true &&
+                    state.sectionOptionals[node.id] &&
+                    !state.sectionOptionals[node.id].checked
+                ) {
                     continue; // skip entirely
                 }
                 // Render children without wrapper
                 renderNodes(node.children || [], parent, state, false);
             }
-        } else if (node.type === 'group') {
+        } else if (node.type === "group") {
             if (nodeRenderUI) {
-                const groupEl = renderGroup(node, state, (childNodes, p, ui) => renderNodes(childNodes, p, state, ui));
+                const groupEl = renderGroup(node, state, (childNodes, p, ui) =>
+                    renderNodes(childNodes, p, state, ui)
+                );
                 if (groupEl) parent.appendChild(groupEl);
             } else {
-                (node.children || []).forEach(ch => {
+                (node.children || []).forEach((ch) => {
                     if (!ch) return;
-                    if (ch.type === 'field') registerHiddenUIField(ch, state);
-                    else if (ch.type === 'group' || ch.type === 'section') renderNodes([ch], parent, state, false);
+                    if (ch.type === "field") registerHiddenUIField(ch, state);
+                    else if (ch.type === "group" || ch.type === "section")
+                        renderNodes([ch], parent, state, false);
                 });
             }
-        } else if (node.type === 'field') {
-            if (hideUI) { registerHiddenUIField(node, state); continue; }
+        } else if (node.type === "field") {
+            if (hideUI) {
+                registerHiddenUIField(node, state);
+                continue;
+            }
             const fieldEl = renderField(node, state);
             if (fieldEl && nodeRenderUI) parent.appendChild(fieldEl);
         }
@@ -95,64 +131,72 @@ function renderNodes(nodes, parent, state, renderUI = true) {
 }
 
 function renderSection(node, state, { hideUI = false, renderChildrenUI = true, customBodyBuilder } = {}) {
-    const sectionEl = document.createElement('div');
-    sectionEl.className = 'section' + (node.id === '__meta__' ? ' meta-editor' : '');
+    const sectionEl = document.createElement("div");
+    sectionEl.className =
+        "section" + (node.id === "__meta__" ? " meta-editor" : "");
     if (node.if) sectionEl.dataset.condition = node.if;
-    if (node.pdf && node.pdf.hidden) sectionEl.dataset.pdfHidden = 'true';
-    if (hideUI) sectionEl.dataset.uiHidden = 'true';
+    if (node.pdf && node.pdf.hidden) sectionEl.dataset.pdfHidden = "true";
+    if (hideUI) sectionEl.dataset.uiHidden = "true";
 
-    // ----- Stable DOM id generation for section navigation -----
-    let baseTitle = node.title || (node.id === '__meta__' ? 'Metadata' : 'Section');
-    const explicit = (node.id && node.id !== '__meta__') ? node.id : null;
+    let baseTitle =
+        node.title || (node.id === "__meta__" ? "Metadata" : "Section");
+    const explicit = node.id && node.id !== "__meta__" ? node.id : null;
     const slugFrom = explicit || baseTitle;
-    let slug = String(slugFrom).toLowerCase().trim()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 50) || 'section';
-    if (slug === '__meta__') slug = 'metadata';
+    let slug =
+        String(slugFrom)
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 50) || "section";
+    if (slug === "__meta__") slug = "metadata";
     let unique = slug;
     let i = 2;
     while (state._usedSectionIds.has(unique)) {
-        unique = slug + '-' + i++;
+        unique = slug + "-" + i++;
     }
     state._usedSectionIds.add(unique);
     sectionEl.id = unique;
 
     // Track for navigation (exclude hidden UI sections)
     if (!hideUI) {
-        state.sections.push({ id: unique, title: baseTitle, optional: !!node.optional });
+        state.sections.push({
+            id: unique,
+            title: baseTitle,
+            optional: !!node.optional,
+        });
     }
 
-    const headerRow = document.createElement('div');
-    headerRow.className = 'section-header-row';
+    const headerRow = document.createElement("div");
+    headerRow.className = "section-header-row";
 
     let checkbox = null;
     if (node.optional === true) {
-        checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'section-optional-checkbox';
+        checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "section-optional-checkbox";
         const prev = node.id && state.sectionOptionals[node.id];
-        const initial = (prev ? prev.checked : (node.default === false ? false : true));
+        const initial = prev ? prev.checked : node.default === false ? false : true;
         checkbox.checked = initial;
         headerRow.appendChild(checkbox);
 
         const syncBody = () => {
-            sectionEl.classList.toggle('disabled', !checkbox.checked);
+            sectionEl.classList.toggle("disabled", !checkbox.checked);
         };
-        checkbox.addEventListener('change', syncBody);
+        checkbox.addEventListener("change", syncBody);
         syncBody();
         if (node.id) state.sectionOptionals[node.id] = checkbox;
     }
 
-    const h = document.createElement('h1');
-    h.textContent = node.title || '';
-    h.addEventListener('click', () => sectionEl.classList.toggle('collapsed'));
+    const h = document.createElement("h1");
+    h.textContent = node.title || "";
+    h.addEventListener("click", () => sectionEl.classList.toggle("collapsed"));
     headerRow.appendChild(h);
 
     sectionEl.appendChild(headerRow);
 
-    const body = document.createElement('div');
-    body.className = 'section-body';
+    const body = document.createElement("div");
+    body.className = "section-body";
     if (customBodyBuilder) {
         customBodyBuilder(body);
     } else if (renderChildrenUI) {
@@ -167,110 +211,129 @@ async function buildMetaEditorBody(body, state) {
     const meta = state.meta || (state.meta = {});
 
     const defaultKeys = {
-        title: '',
-        hospital: '',
-        department: '',
-        unit: '',
-        pdf_header: '',
-        pdf_footer: ''
+        title: "",
+        hospital: "",
+        department: "",
+        unit: "",
+        pdf_header: "",
+        pdf_footer: "",
     };
-    Object.keys(defaultKeys).forEach(k => { if (meta[k] === undefined) meta[k] = defaultKeys[k]; });
+    Object.keys(defaultKeys).forEach((k) => {
+        if (meta[k] === undefined) meta[k] = defaultKeys[k];
+    });
 
-    const form = document.createElement('div');
-    form.className = 'meta-form';
+    const form = document.createElement("div");
+    form.className = "meta-form";
     body.appendChild(form);
 
-    function addTextRow(labelText, key, multiline = false, placeholder = '') {
-        const row = document.createElement('div');
-        row.className = 'meta-row';
-        const label = document.createElement('label');
+    function addTextRow(labelText, key, multiline = false, placeholder = "") {
+        const row = document.createElement("div");
+        row.className = "meta-row";
+        const label = document.createElement("label");
         label.textContent = labelText;
-        label.htmlFor = 'meta_' + key;
+        label.htmlFor = "meta_" + key;
         row.appendChild(label);
         let input;
-        if (multiline) { input = document.createElement('textarea'); input.rows = 2; }
-        else { input = document.createElement('input'); input.type = 'text'; }
-        input.id = 'meta_' + key;
-        input.value = meta[key] || '';
+        if (multiline) {
+            input = document.createElement("textarea");
+            input.rows = 2;
+        } else {
+            input = document.createElement("input");
+            input.type = "text";
+        }
+        input.id = "meta_" + key;
+        input.value = meta[key] || "";
         if (placeholder) input.placeholder = placeholder;
-        input.addEventListener('input', () => { meta[key] = input.value; });
+        input.addEventListener("input", () => {
+            meta[key] = input.value;
+        });
         row.appendChild(input);
         form.appendChild(row);
     }
 
     async function addDepartmentRow() {
-        const row = document.createElement('div');
-        row.className = 'meta-row';
-        const label = document.createElement('label');
-        label.textContent = 'Department';
-        label.htmlFor = 'meta_department';
+        const row = document.createElement("div");
+        row.className = "meta-row";
+        const label = document.createElement("label");
+        label.textContent = "Department";
+        label.htmlFor = "meta_department";
         row.appendChild(label);
         const ac = new AutoCompleteBox();
-        ac.id = 'meta_department';
-        ac.setAttribute('placeholder', 'Start typing department...');
+        ac.id = "meta_department";
+        ac.setAttribute("placeholder", "Start typing department...");
 
         ac.fetcher = async (q) => searchDepartments(q, 30);
-        ac.getItemLabel = (item) => item && item.label || '';
+        ac.getItemLabel = (item) => (item && item.label) || "";
 
         const dept = getDepartmentById(meta.department);
-        ac.value = dept ? dept.label : '';
+        ac.value = dept ? dept.label : "";
 
-        ac.addEventListener('commit', (e) => {
+        ac.addEventListener("commit", (e) => {
             const { item, value, fromSuggestion } = e.detail || {};
-            if (fromSuggestion && item) meta.department = item.id || '';
+            if (fromSuggestion && item) meta.department = item.id || "";
             else if (value) meta.department = value;
         });
 
-        row.appendChild(ac); form.appendChild(row);
+        row.appendChild(ac);
+        form.appendChild(row);
     }
 
-    addTextRow('Title', 'title', false, 'Title');
-    addTextRow('Hospital Name', 'hospital', false, 'Hospital');
+    addTextRow("Title", "title", false, "Title");
+    addTextRow("Hospital Name", "hospital", false, "Hospital");
     await addDepartmentRow();
-    addTextRow('Unit', 'unit', false, 'e.g. Unit I');
-    addTextRow('PDF Header', 'pdf_header', true, 'Extra header line');
-    addTextRow('PDF Footer', 'pdf_footer', true, 'Footer line');
+    addTextRow("Unit", "unit", false, "e.g. Unit I");
+    addTextRow("PDF Header", "pdf_header", true, "Extra header line");
+    addTextRow("PDF Footer", "pdf_footer", true, "Footer line");
 }
 
 function registerHiddenUIField(node, state) {
     if (!node || !node.id) return;
     if (state.fieldRefs[node.id]) return;
-    state.fieldRefs[node.id] = { value: node.default !== undefined ? node.default : '' };
-    if (node.fieldType === 'computed') state.computed.push(node);
+    state.fieldRefs[node.id] = {
+        value: node.default !== undefined ? node.default : "",
+    };
+    if (node.fieldType === "computed") state.computed.push(node);
 }
 
 function renderGroup(node, state, renderNodes) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'group';
-    wrapper.dataset.groupId = node.id || '';
+    const wrapper = document.createElement("div");
+    wrapper.className = "group";
+    wrapper.dataset.groupId = node.id || "";
     if (node.if) wrapper.dataset.condition = node.if;
-    if (node.pdf && node.pdf.hidden) wrapper.dataset.pdfHidden = 'true';
-    if (node.ui && node.ui.hidden) wrapper.dataset.uiHidden = 'true';
+    if (node.pdf && node.pdf.hidden) wrapper.dataset.pdfHidden = "true";
+    if (node.ui && node.ui.hidden) wrapper.dataset.uiHidden = "true";
     if (node.title) {
-        const h = document.createElement('h2');
+        const h = document.createElement("h2");
         h.textContent = node.title;
         wrapper.appendChild(h);
     }
 
-    const layout = String(node.layout || 'vstack');
-    const body = document.createElement('div');
-    body.className = 'group-body';
-    if (/^hstack$/i.test(layout)) body.classList.add('layout-hstack');
-    else if (/^vstack$/i.test(layout)) body.classList.add('layout-vstack');
+    const layout = String(node.layout || "vstack");
+    const body = document.createElement("div");
+    body.className = "group-body";
+    if (/^hstack$/i.test(layout)) body.classList.add("layout-hstack");
+    else if (/^vstack$/i.test(layout)) body.classList.add("layout-vstack");
     else {
         const m = /^columns-(\d+)$/i.exec(layout);
-        if (m) body.classList.add('layout-columns', `cols-${m[1]}`);
-        else body.classList.add('layout-vstack');
+        if (m) body.classList.add("layout-columns", `cols-${m[1]}`);
+        else body.classList.add("layout-vstack");
     }
 
-    (node.children || []).forEach(ch => {
-        if (!ch || ch.type === 'include') return;
-        if (ch.type === 'group') {
+    (node.children || []).forEach((ch) => {
+        if (!ch || ch.type === "include") return;
+        if (ch.type === "group") {
             if (ch.ui && ch.ui.hidden) renderNodes([ch], body, false);
-            else { const el = renderGroup(ch, state, renderNodes); if (el) body.appendChild(el); }
-        } else if (ch.type === 'field') {
-            if (ch.ui && ch.ui.hidden) { registerHiddenUIField(ch, state); return; }
-            const el = renderField(ch, state); if (el) body.appendChild(el);
+            else {
+                const el = renderGroup(ch, state, renderNodes);
+                if (el) body.appendChild(el);
+            }
+        } else if (ch.type === "field") {
+            if (ch.ui && ch.ui.hidden) {
+                registerHiddenUIField(ch, state);
+                return;
+            }
+            const el = renderField(ch, state);
+            if (el) body.appendChild(el);
         }
     });
     wrapper.appendChild(body);
@@ -278,16 +341,16 @@ function renderGroup(node, state, renderNodes) {
 }
 
 function renderField(node, state) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'form-row';
+    const wrapper = document.createElement("div");
+    wrapper.className = "form-row";
     wrapper.dataset.fieldId = node.id;
     wrapper.dataset.fieldType = node.fieldType;
     if (node.if) wrapper.dataset.condition = node.if;
     if (node.label) {
-        const label = document.createElement('label');
+        const label = document.createElement("label");
         label.textContent = node.label;
         label.htmlFor = node.id;
-        if (node.required) label.classList.add('required');
+        if (node.required) label.classList.add("required");
         wrapper.appendChild(label);
     }
 
@@ -297,24 +360,10 @@ function renderField(node, state) {
     if (renderer) renderer(node, wrapper, state);
     else {
         // Fallback to basic text input to avoid losing data unexpectedly
-        renderInputField({ ...node, fieldType: 'text' }, wrapper, state);
+        renderInputField({ ...node, fieldType: "text" }, wrapper, state);
     }
     // Legacy commented block preserved for reference
-    // else if (node.fieldType === 'personal-history') {
-    //     const title = document.createElement('label'); title.textContent = node.label || 'Personal History'; wrapper.appendChild(title);
-    //     const holder = document.createElement('div'); holder.className = 'field-input';
-    //     holder.innerHTML = `<div class='ph-grid'>
-    //   <div><span>Sleep</span><select data-key='sleep'><option value=''>--</option><option>Normal</option><option>Disturbed</option></select></div>
-    //   <div><span>Appetite</span><select data-key='appetite'><option value=''>--</option><option>Normal</option><option>Reduced</option><option>Increased</option></select></div>
-    //   <div><span>Bowel</span><input data-key='bowel' placeholder='Habits'/></div>
-    //   <div><span>Bladder</span><input data-key='bladder' placeholder='Habits'/></div>
-    //   <div><span>Diet</span><select data-key='diet'><option value=''>--</option><option>Veg</option><option>Non-Veg</option><option>Mixed</option></select></div>
-    //   <div><span>Alcohol</span><input data-key='alcohol' placeholder='Amount & duration'/></div>
-    //   <div><span>Smoking</span><input data-key='smoking' placeholder='Amount & duration'/></div>
-    // </div>`;
-    //     wrapper.appendChild(holder);
-    //     state.fieldRefs[node.id] = { get value() { const obj = {}; holder.querySelectorAll('[data-key]').forEach(el => { obj[el.dataset.key] = el.value; }); return obj; } };
-    // } else if (node.fieldType === 'general-exam') {
+    // else if (node.fieldType === 'general-exam') {
     //     const title = document.createElement('label'); title.textContent = node.label || 'General Examination'; wrapper.appendChild(title);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
     //     holder.innerHTML = `<div class='ge-grid'>
@@ -339,36 +388,6 @@ function renderField(node, state) {
     // </div>`;
     //     wrapper.appendChild(holder);
     //     state.fieldRefs[node.id] = { get value() { const obj = {}; holder.querySelectorAll('[data-key]').forEach(el => { obj[el.dataset.key] = el.value; }); obj.signs = [...holder.querySelectorAll('[data-sign]')].filter(c => c.checked).map(c => c.dataset.sign); return obj; } };
-    // } else if (node.fieldType === 'drug-treatment') {
-    //     // uses local drug json catalogs
-    //     const label = document.createElement('label'); label.textContent = node.label || 'Treatment'; wrapper.appendChild(label);
-    //     const holder = document.createElement('div'); holder.className = 'field-input';
-    //     const table = document.createElement('table'); table.className = 'drug-table'; table.innerHTML = '<thead><tr><th>Drug</th><th>Dose</th><th>Frequency</th><th>Route</th><th>Duration</th><th></th></tr></thead><tbody></tbody>';
-    //     const tbody = table.querySelector('tbody');
-    //     const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.textContent = 'Add Drug';
-    //     addBtn.addEventListener('click', () => addRow());
-    //     holder.appendChild(table); holder.appendChild(addBtn); wrapper.appendChild(holder);
-    //     const drugCache = {};
-    //     async function loadCatalogLocal(path) { if (drugCache[path]) return drugCache[path]; const res = await fetch(path); const json = await res.json(); drugCache[path] = json; return json; }
-    //     let drugList = [], doseList = [], freqList = [], routeList = [];
-    //     Promise.all([
-    //         loadCatalogLocal('data/drugs.json'),
-    //         loadCatalogLocal('data/drug-dosages.json'),
-    //         loadCatalogLocal('data/drug-frequency.json'),
-    //         loadCatalogLocal('data/drug-routes.json')
-    //     ]).then(([a, b, c, d]) => { drugList = a; doseList = b; freqList = c; routeList = d; });
-    //     function buildSelect(options) { const s = document.createElement('select'); const blank = document.createElement('option'); blank.value = ''; blank.textContent = '--'; s.appendChild(blank); options.forEach(o => { const opt = document.createElement('option'); if (typeof o === 'string') { opt.value = o; opt.textContent = o; } else { opt.value = o.value || o.name || o.code || o; opt.textContent = o.label || o.name || o.value || o; } s.appendChild(opt); }); return s; }
-    //     function addRow(rowData = {}) {
-    //         const tr = document.createElement('tr');
-    //         const drugTd = document.createElement('td'); const drugSel = buildSelect(drugList); drugSel.value = rowData.drug || ''; drugTd.appendChild(drugSel); tr.appendChild(drugTd);
-    //         const doseTd = document.createElement('td'); const doseSel = buildSelect(doseList); doseSel.value = rowData.dose || ''; doseTd.appendChild(doseSel); tr.appendChild(doseTd);
-    //         const freqTd = document.createElement('td'); const freqSel = buildSelect(freqList); freqSel.value = rowData.frequency || ''; freqTd.appendChild(freqSel); tr.appendChild(freqTd);
-    //         const routeTd = document.createElement('td'); const routeSel = buildSelect(routeList); routeSel.value = rowData.route || ''; routeTd.appendChild(routeSel); tr.appendChild(routeTd);
-    //         const durTd = document.createElement('td'); const dur = document.createElement('input'); dur.type = 'text'; dur.placeholder = 'e.g. 5 days'; dur.value = rowData.duration || ''; durTd.appendChild(dur); tr.appendChild(durTd);
-    //         const action = document.createElement('td'); const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '×'; rm.addEventListener('click', () => tr.remove()); action.appendChild(rm); tr.appendChild(action);
-    //         tbody.appendChild(tr);
-    //     }
-    //     state.fieldRefs[node.id] = { get value() { return [...tbody.querySelectorAll('tr')].map(tr => { const tds = tr.querySelectorAll('td'); return { drug: tds[0].querySelector('select').value, dose: tds[1].querySelector('select').value, frequency: tds[2].querySelector('select').value, route: tds[3].querySelector('select').value, duration: tds[4].querySelector('input').value }; }).filter(r => r.drug); } };
     // } else if (node.fieldType === 'investigations') {
     //     const label = document.createElement('label'); label.textContent = node.label || 'Investigations'; wrapper.appendChild(label);
     //     const holder = document.createElement('div'); holder.className = 'field-input';
@@ -404,44 +423,55 @@ function renderField(node, state) {
 }
 
 function renderDiagnosisField(node, wrapper, state) {
-    const baseId = (node && node.id) ? String(node.id) : `diagnosis-${Math.random().toString(36).slice(2)}`;
+    const baseId =
+        node && node.id
+            ? String(node.id)
+            : `diagnosis-${Math.random().toString(36).slice(2)}`;
     const ac = new AutoCompleteBox();
-    ac.setAttribute('placeholder', node.placeholder || '');
+    ac.setAttribute("placeholder", node.placeholder || "");
     ac.id = baseId;
     ac.fetcher = async (q) => icdSearchWithCache(q);
-    ac.getItemLabel = (item) => (item && (item.description || item.label || item.name || item.value || item.code)) || '';
-    ac.getItemSecondary = (item) => (item && item.code) ? String(item.code) : '';
+    ac.getItemLabel = (item) =>
+        (item &&
+            (item.description ||
+                item.label ||
+                item.name ||
+                item.value ||
+                item.code)) ||
+        "";
+    ac.getItemSecondary = (item) => (item && item.code ? String(item.code) : "");
 
-    const tagList = document.createElement('div');
-    tagList.className = 'tag-list';
+    const tagList = document.createElement("div");
+    tagList.className = "tag-list";
 
     if (!Array.isArray(state.diagnosis)) state.diagnosis = [];
 
     function renderTags() {
-        tagList.innerHTML = '';
+        tagList.innerHTML = "";
         if (state.diagnosis.length === 0) {
-            tagList.style.display = 'none';
+            tagList.style.display = "none";
             return;
         }
 
         state.diagnosis.forEach((entry, idx) => {
-            const tag = document.createElement('div');
-            tag.className = 'tag';
-            tag.textContent = `${entry.description}` + (entry.code ? ` (${entry.code})` : '');
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'remove-button';
-            btn.addEventListener('click', () => {
+            const tag = document.createElement("div");
+            tag.className = "tag";
+            tag.textContent =
+                `${entry.description}` + (entry.code ? ` (${entry.code})` : "");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "remove-button";
+            btn.addEventListener("click", () => {
                 state.diagnosis.splice(idx, 1);
                 renderTags();
             });
             tag.appendChild(btn);
             tagList.appendChild(tag);
         });
-        tagList.style.display = 'flex';
+        tagList.style.display = "flex";
     }
 
-    ac.addEventListener('commit', (e) => {
+    ac.addEventListener("commit", (e) => {
         const { item, value, fromSuggestion } = e.detail || {};
         if (fromSuggestion && item) {
             state.diagnosis.push(item);
@@ -456,64 +486,98 @@ function renderDiagnosisField(node, wrapper, state) {
     wrapper.appendChild(tagList);
 
     state.fieldRefs[node.id] = {
-        get value() { return state.diagnosis; },
+        get value() {
+            return state.diagnosis;
+        },
         set value(v) {
             state.diagnosis = Array.isArray(v) ? v : [];
             renderTags();
-        }
+        },
     };
 }
+
+const _durationUnits = ["days", "weeks", "months", "years"];
 
 function renderComplaintsField(node, wrapper, state) {
     const knownList = [];
     if (node.suggestions) {
         const arr = [];
         if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
-        else if (typeof node.suggestions === 'string') arr.push(...node.suggestions.split(',').map(s => s.trim()));
+        else if (typeof node.suggestions === "string")
+            arr.push(...node.suggestions.split(",").map((s) => s.trim()));
         knownList.push(...arr);
     }
     const editor = new DataEditor();
-    editor.setAttribute('add-label', 'Add Complaint');
+    editor.setAttribute("add-label", "Add Complaint");
     editor.columns = [
         {
-            key: 'complaint', label: 'Complaint', type: 'custom', placeholder: node.placeholder || 'Complaint', width: '50%',
+            key: "complaint",
+            label: "Complaint",
+            type: "custom",
+            placeholder: node.placeholder || "Complaint",
+            width: "50%",
             createEditor: (rowIndex, col, value, commit) => {
                 const ac = new AutoCompleteBox();
-                ac.placeholder = col.placeholder || '';
-                ac.value = value || '';
+                ac.placeholder = col.placeholder || "";
+                ac.value = value || "";
                 ac.fetcher = snomedSearchWithCache;
-                ac.getItemLabel = (item) => item || '';
-                ac.addEventListener('commit', e => commit(e.detail.value));
-                ac.addEventListener('text-changed', () => commit(ac.value));
+                ac.getItemLabel = (item) => item || "";
+                ac.addEventListener("commit", (e) => commit(e.detail.value));
+                ac.addEventListener("text-changed", () => commit(ac.value));
                 return ac;
             },
             getValue: (el) => el.value,
-            setValue: (el, v) => { el.value = v || ''; }
+            setValue: (el, v) => {
+                el.value = v || "";
+            },
         },
-        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'Duration' },
-        { key: 'unit', label: 'Unit', type: 'select', options: ['days', 'weeks', 'months', 'years'], default: 'days' }
+        {
+            key: "duration",
+            label: "Duration",
+            type: "number",
+            placeholder: "Duration",
+        },
+        {
+            key: "unit",
+            label: "Unit",
+            type: "select",
+            options: _durationUnits,
+            default: "days",
+        },
     ];
 
     editor.quickAdd = {
         items: knownList,
-        onAdd: (name) => ({ complaint: name, duration: '', unit: 'days' }),
-        matchItem: (items, name) => items.some(it => (it.complaint || '').toLowerCase() === name.toLowerCase())
+        onAdd: (name) => ({ complaint: name, duration: "", unit: "days" }),
+        matchItem: (items, name) =>
+            items.some(
+                (it) => (it.complaint || "").toLowerCase() === name.toLowerCase()
+            ),
     };
 
     wrapper.appendChild(editor);
 
     state.fieldRefs[node.id] = {
         get value() {
-            return (editor.items || []).map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }))
-                .filter(it => it.complaint);
+            return (editor.items || [])
+                .map((it) => ({
+                    complaint: it.complaint || "",
+                    duration: it.duration || "",
+                    unit: it.unit || "days",
+                }))
+                .filter((it) => it.complaint);
         },
         set value(v) {
             if (Array.isArray(v)) {
-                editor.items = v.map(it => ({ complaint: it.complaint || '', duration: it.duration || '', unit: it.unit || 'days' }));
+                editor.items = v.map((it) => ({
+                    complaint: it.complaint || "",
+                    duration: it.duration || "",
+                    unit: it.unit || "days",
+                }));
             } else {
                 editor.items = [];
             }
-        }
+        },
     };
 }
 
@@ -522,37 +586,88 @@ function renderChronicDiseasesField(node, wrapper, state) {
     if (node.suggestions) {
         const arr = [];
         if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
-        else if (typeof node.suggestions === 'string') arr.push(...node.suggestions.split(',').map(s => s.trim()));
+        else if (typeof node.suggestions === "string")
+            arr.push(...node.suggestions.split(",").map((s) => s.trim()));
         knownList.push(...arr);
     }
     const editor = new DataEditor();
-    editor.setAttribute('add-label', 'Add Chronic Disease');
+    editor.setAttribute("add-label", "Add Chronic Disease");
     editor.columns = [
-        { key: 'disease', label: 'Chronic Disease', type: 'text', placeholder: 'e.g. Diabetes Mellitus', width: '35%' },
-        { key: 'duration', label: 'Duration', type: 'number', placeholder: 'e.g. 5', width: '15%' },
-        { key: 'unit', label: 'Unit', type: 'select', options: ['years', 'months', 'weeks', 'days'], default: 'years', width: '15%' },
-        { key: 'treatment', label: 'Treatment', type: 'text', placeholder: 'e.g. Metformin', width: '35%' }
+        {
+            key: "disease",
+            label: "Chronic Disease",
+            type: "text",
+            placeholder: "e.g. Diabetes Mellitus",
+            width: "35%",
+        },
+        {
+            key: "duration",
+            label: "Duration",
+            type: "number",
+            placeholder: "e.g. 5",
+            width: "15%",
+        },
+        {
+            key: "unit",
+            label: "Unit",
+            type: "select",
+            options: _durationUnits,
+            default: "years",
+            width: "15%",
+        },
+        {
+            key: "treatment",
+            label: "Treatment",
+            type: "text",
+            placeholder: "e.g. Metformin",
+            width: "35%",
+        },
     ];
 
     editor.quickAdd = {
         items: knownList,
-        onAdd: (name) => ({ disease: name, duration: '', unit: 'years', treatment: '' }),
-        matchItem: (items, name) => items.some(it => (it.disease || '').toLowerCase() === name.toLowerCase())
+        onAdd: (name) => ({
+            disease: name,
+            duration: "",
+            unit: "years",
+            treatment: "",
+        }),
+        matchItem: (items, name) =>
+            items.some(
+                (it) => (it.disease || "").toLowerCase() === name.toLowerCase()
+            ),
     };
 
     wrapper.appendChild(editor);
 
     state.fieldRefs[node.id] = {
-        get value() { return (editor.items || []).filter(it => it.disease); },
+        get value() {
+            return (editor.items || []).filter((it) => it.disease);
+        },
         set value(v) {
             if (Array.isArray(v)) {
-                const mapped = v.map(it => {
-                    if (typeof it === 'string') return { disease: it, duration: '', unit: 'years', treatment: '' };
-                    return { disease: it.disease || it.name || '', duration: it.duration || '', unit: it.unit || 'years', treatment: it.treatment || '' };
-                }).filter(it => it.disease);
+                const mapped = v
+                    .map((it) => {
+                        if (typeof it === "string")
+                            return {
+                                disease: it,
+                                duration: "",
+                                unit: "years",
+                                treatment: "",
+                            };
+                        return {
+                            disease: it.disease || it.name || "",
+                            duration: it.duration || "",
+                            unit: it.unit || "years",
+                            treatment: it.treatment || "",
+                        };
+                    })
+                    .filter((it) => it.disease);
                 editor.items = mapped;
-            } else { editor.items = []; }
-        }
+            } else {
+                editor.items = [];
+            }
+        },
     };
 }
 
@@ -561,43 +676,207 @@ function renderPastEventsField(node, wrapper, state) {
     if (node.suggestions) {
         const arr = [];
         if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
-        else if (typeof node.suggestions === 'string') arr.push(...node.suggestions.split(',').map(s => s.trim()));
+        else if (typeof node.suggestions === "string")
+            arr.push(...node.suggestions.split(",").map((s) => s.trim()));
         knownList.push(...arr);
     }
     const editor = new DataEditor();
-    editor.setAttribute('add-label', 'Add Past Event');
+    editor.setAttribute("add-label", "Add Past Event");
     editor.columns = [
-        { key: 'event', label: 'Event', type: 'text', placeholder: 'e.g. Surgery, Hospitalization, etc.', width: '40%' },
-        { key: 'details', label: 'Details', type: 'text', placeholder: 'e.g. Appendicectomy in 2015', width: '60%' }
+        {
+            key: "event",
+            label: "Event",
+            type: "text",
+            placeholder: "e.g. Surgery, Hospitalization, etc.",
+            width: "40%",
+        },
+        {
+            key: "details",
+            label: "Details",
+            type: "text",
+            placeholder: "e.g. Appendicectomy in 2015",
+            width: "60%",
+        },
     ];
     editor.quickAdd = {
         items: knownList,
-        onAdd: (name) => ({ event: name, details: '' }),
-        matchItem: (items, name) => items.some(it => (it.event || '').toLowerCase() === name.toLowerCase())
+        onAdd: (name) => ({ event: name, details: "" }),
+        matchItem: (items, name) =>
+            items.some((it) => (it.event || "").toLowerCase() === name.toLowerCase()),
     };
 
     wrapper.appendChild(editor);
 
     state.fieldRefs[node.id] = {
-        get value() { return (editor.items || []).filter(it => it.event); },
+        get value() {
+            return (editor.items || []).filter((it) => it.event);
+        },
         set value(v) {
             if (Array.isArray(v)) {
-                const mapped = v.map(it => {
-                    if (typeof it === 'string') return { event: it, details: '' };
-                    return { event: it.event || '', details: it.details || '' };
-                }).filter(it => it.event);
+                const mapped = v
+                    .map((it) => {
+                        if (typeof it === "string") return { event: it, details: "" };
+                        return { event: it.event || "", details: it.details || "" };
+                    })
+                    .filter((it) => it.event);
                 editor.items = mapped;
-            } else { editor.items = []; }
-        }
+            } else {
+                editor.items = [];
+            }
+        },
+    };
+}
+
+function renderMedicationsField(node, wrapper, state) {
+    const knownList = [];
+    if (node.suggestions) {
+        const arr = [];
+        if (Array.isArray(node.suggestions)) arr.push(...node.suggestions);
+        else if (typeof node.suggestions === "string")
+            arr.push(...node.suggestions.split(",").map((s) => s.trim()));
+        knownList.push(...arr);
+    }
+    const editor = new DataEditor();
+    editor.setAttribute("add-label", "Add Medication");
+
+    editor.columns = [
+        {
+            key: "name",
+            label: "Name",
+            type: "custom",
+            width: "30%",
+            placeholder: "Name",
+            createEditor: (rowIndex, col, value, commit) => {
+                const ac = new AutoCompleteBox();
+                ac.placeholder = col.placeholder;
+                ac.value = value || "";
+                ac.fetcher = searchDrugs;
+                ac.getItemLabel = (item) => item || "";
+                ac.addEventListener("commit", (e) => commit(e.detail.value));
+                ac.addEventListener("text-changed", () => commit(ac.value));
+                return ac;
+            },
+            getValue: (el) => el.value,
+            setValue: (el, v) => {
+                el.value = v || "";
+            },
+        },
+        {
+            key: "dosage",
+            label: "Dosage",
+            type: "custom",
+            width: "20%",
+            createEditor: (rowIndex, col, value, commit) => {
+                const q = new QuantityUnitInput();
+                q.dataset.role = 'dosage';
+                q.setAttribute("placeholder", "Dose");
+                q.setSource('data/drug_dosages.json');
+                if (value && typeof value === 'object') {
+                    q.value = value.value || "";
+                    q.unit = value.unit || "";
+                } else if (typeof value === 'string') {
+                    const m = value.match(/^(\S+)\s+(.*)$/);
+                    if (m) { q.value = m[1]; q.unit = m[2]; } else { q.value = value; }
+                }
+                q.addEventListener('change', () => commit({ value: q.value, unit: q.unit }));
+                return q;
+            },
+            getValue: (el) => ({ value: el.value, unit: el.unit }),
+            setValue: (el, v) => {
+                if (v && typeof v === 'object') { el.value = v.value || ''; el.unit = v.unit || ''; }
+                else if (typeof v === 'string') { const m = v.match(/^(\S+)\s+(.*)$/); if (m) { el.value = m[1]; el.unit = m[2]; } else el.value = v; }
+            }
+        },
+        {
+            key: "route",
+            label: "Route",
+            type: "select",
+            source: "data/drug_routes.json",
+            width: "10%",
+        },
+        {
+            key: "frequency",
+            label: "Frequency",
+            type: "select",
+            source: "data/drug_frequency.json",
+            width: "15%",
+        },
+        {
+            key: "duration",
+            label: "Duration",
+            type: "custom",
+            width: "15%",
+            createEditor: (rowIndex, col, value, commit) => {
+                const q = new QuantityUnitInput();
+                q.dataset.role = 'duration';
+                q.units = _durationUnits;
+                if (value && typeof value === 'object') { q.value = value.value || ''; q.unit = value.unit || 'days'; }
+                else if (typeof value === 'string') { const m = value.match(/^(\d+)\s*(\w+)/); if (m) { q.value = m[1]; q.unit = m[2]; } else q.value = value; }
+                q.addEventListener('change', () => commit({ value: q.value, unit: q.unit }));
+                return q;
+            },
+            getValue: (el) => ({ value: el.value, unit: el.unit }),
+            setValue: (el, v) => {
+                if (v && typeof v === 'object') { el.value = v.value || ''; el.unit = v.unit || 'days'; }
+                else if (typeof v === 'string') { const m = v.match(/^(\d+)\s*(\w+)/); if (m) { el.value = m[1]; el.unit = m[2]; } else el.value = v; }
+            }
+        },
+    ];
+    editor.quickAdd = {
+        items: knownList,
+        onAdd: (name) => ({ name: name }),
+        matchItem: (items, name) =>
+            items.some((it) => (it.name || "").toLowerCase() === name.toLowerCase()),
+    };
+
+    wrapper.appendChild(editor);
+
+    state.fieldRefs[node.id] = {
+        get value() {
+            return (editor.items || [])
+                .map((it) => {
+                    const dosageObj = it.dosage && typeof it.dosage === 'object' ? it.dosage : { value: '', unit: '' };
+                    const durationObj = it.duration && typeof it.duration === 'object' ? it.duration : { value: '', unit: 'days' };
+                    return {
+                        name: it.name || it.name || '',
+                        dosage: dosageObj,
+                        route: it.route || '',
+                        frequency: it.frequency || '',
+                        duration: durationObj
+                    };
+                })
+                .filter(it => it.name);
+        },
+        set value(v) {
+            if (Array.isArray(v)) {
+                const mapped = v
+                    .map((it) => {
+                        if (typeof it === 'string') return { name: it, dosage: { value: '', unit: '' }, route: '', frequency: '', duration: { value: '', unit: 'days' } };
+                        let dosage = it.dosage;
+                        if (typeof dosage === 'string') {
+                            const m = dosage.match(/^(\S+)\s+(.*)$/); dosage = m ? { value: m[1], unit: m[2] } : { value: dosage, unit: '' };
+                        } else if (!dosage || typeof dosage !== 'object') dosage = { value: '', unit: '' };
+                        let duration = it.duration;
+                        if (typeof duration === 'string') {
+                            const m2 = duration.match(/^(\d+)\s*(\w+)/); duration = m2 ? { value: m2[1], unit: m2[2] } : { value: duration, unit: 'days' };
+                        } else if (!duration || typeof duration !== 'object') duration = { value: '', unit: 'days' };
+                        return { name: it.name || it.name || '', dosage, route: it.route || '', frequency: it.frequency || '', duration };
+                    })
+                    .filter((it) => it.name);
+                editor.items = mapped;
+            } else {
+                editor.items = [];
+            }
+        },
     };
 }
 
 function renderInputField(node, wrapper, state) {
-    const input = document.createElement('input');
+    const input = document.createElement("input");
     input.id = node.id;
     input.name = node.id;
     input.type = node.fieldType;
-    if (input.type === 'checkbox') wrapper.classList.add('inline', 'reverse');
+    if (input.type === "checkbox") wrapper.classList.add("inline", "reverse");
     if (node.placeholder) input.placeholder = node.placeholder;
     if (node.min) input.min = node.min;
     if (node.max) input.max = node.max;
@@ -606,22 +885,29 @@ function renderInputField(node, wrapper, state) {
     wrapper.appendChild(input);
     state.fieldRefs[node.id] = input;
     if (node.required || node.min || node.max || node.pattern) {
-        applyValidation(input, { required: node.required, min: node.min, max: node.max, pattern: node.pattern });
+        applyValidation(input, {
+            required: node.required,
+            min: node.min,
+            max: node.max,
+            pattern: node.pattern,
+        });
     }
 }
 
 function renderMultiLineTextField(node, wrapper, state) {
-    const ta = document.createElement('textarea');
+    const ta = document.createElement("textarea");
     ta.id = node.id;
     ta.name = node.id;
     wrapper.appendChild(ta);
     state.fieldRefs[node.id] = ta;
     if (node.default) ta.value = node.default;
-    if (node.required) { applyValidation(ta, { required: true }); }
+    if (node.required) {
+        applyValidation(ta, { required: true });
+    }
 }
 
 function renderSelectField(node, wrapper, state) {
-    const select = document.createElement('select');
+    const select = document.createElement("select");
     select.id = node.id;
     select.name = node.id;
     wrapper.appendChild(select);
@@ -630,72 +916,78 @@ function renderSelectField(node, wrapper, state) {
     if (node.required) applyValidation(select, { required: true });
     if (node.multiple) select.multiple = true;
 
-    loadSelectOptions(select, node, state).catch(console.error);
+    loadSelectOptions(select, node).catch(console.error);
 }
 
-async function loadSelectOptions(selectEl, node, state) {
+async function loadSelectOptions(selectEl, node) {
     if (node.source) {
-        const data = await loadCatalog(node.source, state);
-        data.forEach(opt => { const o = document.createElement('option'); o.value = opt.value || opt.code || opt.id || opt; o.textContent = opt.label || opt.value || opt.code || opt; selectEl.appendChild(o); });
+        const data = await loadCatalog(node.source);
+        data.forEach((opt) => {
+            const o = document.createElement("option");
+            o.value = opt.value || opt.code || opt.id || opt;
+            o.textContent = opt.label || opt.value || opt.code || opt;
+            selectEl.appendChild(o);
+        });
     } else if (node.options) {
-        const arr = Array.isArray(node.options) ? node.options : String(node.options).split(',').map(o => o.trim());
-        arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; selectEl.appendChild(o); });
+        const arr = Array.isArray(node.options)
+            ? node.options
+            : String(node.options)
+                .split(",")
+                .map((o) => o.trim());
+        arr.forEach((v) => {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            selectEl.appendChild(o);
+        });
     }
 }
 
-async function loadCatalog(path, state) {
-    if (state.catalogsCache[path]) return state.catalogsCache[path];
-    const res = await fetch(path);
-    if (!res.ok) throw new Error('Catalog load failed: ' + path);
-    const json = await res.json();
-    state.catalogsCache[path] = json;
-    return json;
-}
-
 function renderTableField(node, wrapper, state) {
-    const tableWrapper = document.createElement('div');
-    tableWrapper.className = 'table-wrapper';
-    const table = document.createElement('table');
+    const tableWrapper = document.createElement("div");
+    tableWrapper.className = "table-wrapper";
+    const table = document.createElement("table");
     const cols = node.columns;
-    const thead = document.createElement('thead');
-    thead.innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
-    const tbody = document.createElement('tbody');
+    const thead = document.createElement("thead");
+    thead.innerHTML =
+        "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
+    const tbody = document.createElement("tbody");
     table.appendChild(thead);
     table.appendChild(tbody);
     tableWrapper.appendChild(table);
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.textContent = 'Add Row';
-    addBtn.className = 'add-button';
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "Add Row";
+    addBtn.className = "add-button";
     function addRow(values = {}) {
-        const tr = document.createElement('tr');
-        cols.forEach(col => {
-            const td = document.createElement('td');
-            const inp = document.createElement('input');
-            inp.type = 'text';
+        const tr = document.createElement("tr");
+        cols.forEach((col) => {
+            const td = document.createElement("td");
+            const inp = document.createElement("input");
+            inp.type = "text";
             inp.dataset.col = col;
-            inp.value = values[col] || '';
+            inp.value = values[col] || "";
             td.appendChild(inp);
             tr.appendChild(td);
         });
-        const removeRow = document.createElement('td');
-        const rm = document.createElement('button');
-        rm.type = 'button';
-        rm.className = 'remove-button';
-        rm.addEventListener('click', () => tbody.removeChild(tr));
+        const removeRow = document.createElement("td");
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "remove-button";
+        rm.addEventListener("click", () => tbody.removeChild(tr));
         removeRow.appendChild(rm);
         tr.appendChild(removeRow);
         tbody.appendChild(tr);
     }
-    addBtn.addEventListener('click', () => addRow());
+    addBtn.addEventListener("click", () => addRow());
     wrapper.appendChild(tableWrapper);
     wrapper.appendChild(addBtn);
 
     state.fieldRefs[node.id] = {
         get value() {
-            return [...tbody.querySelectorAll('tr')].map(tr => {
+            return [...tbody.querySelectorAll("tr")].map((tr) => {
                 const obj = {};
-                cols.forEach(col => {
+                cols.forEach((col) => {
                     const inp = tr.querySelector(`input[data-col="${col}"]`);
                     obj[col] = inp.value;
                 });
@@ -704,75 +996,77 @@ function renderTableField(node, wrapper, state) {
         },
         set value(v) {
             if (!Array.isArray(v)) return;
-            tbody.innerHTML = '';
-            v.forEach(row => addRow(row));
-        }
+            tbody.innerHTML = "";
+            v.forEach((row) => addRow(row));
+        },
     };
 }
 
 function renderListField(node, wrapper, state) {
-    const listWrapper = document.createElement('div');
-    listWrapper.className = 'list-wrapper';
-    const ul = document.createElement('ul');
-    ul.className = 'list-field';
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.textContent = 'Add';
-    addBtn.addEventListener('click', () => addItem(''));
+    const listWrapper = document.createElement("div");
+    listWrapper.className = "list-wrapper";
+    const ul = document.createElement("ul");
+    ul.className = "list-field";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "Add";
+    addBtn.addEventListener("click", () => addItem(""));
     listWrapper.appendChild(ul);
     listWrapper.appendChild(addBtn);
     wrapper.appendChild(listWrapper);
     function addItem(val) {
-        const li = document.createElement('li');
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.value = val || '';
-        const rm = document.createElement('button');
-        rm.type = 'button';
-        rm.className = 'remove-button';
-        rm.addEventListener('click', () => li.remove());
+        const li = document.createElement("li");
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.value = val || "";
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "remove-button";
+        rm.addEventListener("click", () => li.remove());
         li.appendChild(inp);
         li.appendChild(rm);
         ul.appendChild(li);
     }
     state.fieldRefs[node.id] = {
         get value() {
-            return [...ul.querySelectorAll('li input')].map(i => i.value).filter(v => v.trim() !== '');
+            return [...ul.querySelectorAll("li input")]
+                .map((i) => i.value)
+                .filter((v) => v.trim() !== "");
         },
         set value(v) {
             if (!Array.isArray(v)) return;
-            ul.innerHTML = '';
-            v.forEach(item => addItem(item));
-        }
+            ul.innerHTML = "";
+            v.forEach((item) => addItem(item));
+        },
     };
 }
 
 function renderHiddenInput(node, wrapper, state) {
-    const input = document.createElement('input');
-    input.type = 'hidden';
+    const input = document.createElement("input");
+    input.type = "hidden";
     input.id = node.id;
     input.name = node.id;
     if (node.default) input.value = node.default;
-    wrapper.style.display = 'none';
+    wrapper.style.display = "none";
     wrapper.appendChild(input);
     state.fieldRefs[node.id] = input;
 }
 
 export function reevaluateConditions(root, state) {
-    const rows = root.querySelectorAll('[data-condition]');
-    rows.forEach(row => {
+    const rows = root.querySelectorAll("[data-condition]");
+    rows.forEach((row) => {
         const expr = row.dataset.condition;
-        const visible = evaluateCondition(expr, id => getFieldValue(id, state));
-        row.classList.toggle('hidden', !visible);
+        const visible = evaluateCondition(expr, (id) => getFieldValue(id, state));
+        row.classList.toggle("hidden", !visible);
     });
 }
 
 export function getFieldValueFromRef(ref) {
     if (!ref) return undefined;
     if (ref instanceof HTMLElement) {
-        if (ref.type === 'checkbox') return ref.checked;
+        if (ref.type === "checkbox") return ref.checked;
     }
-    return ref && 'value' in ref ? ref.value : undefined;
+    return ref && "value" in ref ? ref.value : undefined;
 }
 
 export function getFieldValue(id, state) {
@@ -782,60 +1076,74 @@ export function getFieldValue(id, state) {
 
 export function evaluateComputedAll(state) {
     if (!state.computed.length) return;
-    state.computed.forEach(node => {
-        const formula = node.formula; if (!formula) return;
+    state.computed.forEach((node) => {
+        const formula = node.formula;
+        if (!formula) return;
         try {
             // Use a Proxy that cooperates with `with(ctx)` lookup rules:
             // - `has` must return true for known field ids so identifiers bind here
             // - return false for others so globals like Math/Date stay accessible
-            const ctx = new Proxy({}, {
-                has(_, prop) {
-                    if (typeof prop === 'symbol') return false;
-                    return Object.prototype.hasOwnProperty.call(state.fieldRefs, prop);
-                },
-                get(_, prop) {
-                    if (typeof prop === 'symbol') return undefined;
-                    return getFieldValue(prop, state);
+            const ctx = new Proxy(
+                {},
+                {
+                    has(_, prop) {
+                        if (typeof prop === "symbol") return false;
+                        return Object.prototype.hasOwnProperty.call(state.fieldRefs, prop);
+                    },
+                    get(_, prop) {
+                        if (typeof prop === "symbol") return undefined;
+                        return getFieldValue(prop, state);
+                    },
                 }
-            });
+            );
 
-            const fn = new Function('ctx', `with(ctx){ return ${formula}; }`);
+            const fn = new Function("ctx", `with(ctx){ return ${formula}; }`);
             let val = fn(ctx);
             if (node.format && /^decimal\(\d+\)$/.test(node.format)) {
-                const d = parseInt(node.format.match(/decimal\((\d+)\)/)[1], 10); if (typeof val === 'number') val = val.toFixed(d);
+                const d = parseInt(node.format.match(/decimal\((\d+)\)/)[1], 10);
+                if (typeof val === "number") val = val.toFixed(d);
             }
-            state.fieldRefs[node.id].value = (val ?? '').toString();
-        } catch (e) { /* ignore */ }
+            state.fieldRefs[node.id].value = (val ?? "").toString();
+        } catch (e) {
+            /* ignore */
+        }
     });
 }
 
 // Render parsed markdown AST into HTML (safe, no raw HTML passthrough)
 export function renderMarkdownHtml(ast) {
     function runsToHtml(runs) {
-        return runs.map(r => {
-            let t = escapeHtml(r.text);
-            if (r.bold) t = `<strong>${t}</strong>`;
-            if (r.italic) t = `<em>${t}</em>`;
-            return t;
-        }).join('');
+        return runs
+            .map((r) => {
+                let t = escapeHtml(r.text);
+                if (r.bold) t = `<strong>${t}</strong>`;
+                if (r.italic) t = `<em>${t}</em>`;
+                return t;
+            })
+            .join("");
     }
 
     function renderBlocks(blocks) {
-        return blocks.map(b => {
-            if (b.type === 'paragraph') return `<p>${runsToHtml(b.runs).replace(/\n/g, '<br/>')}</p>`;
-            if (b.type === 'list') {
-                const tag = b.ordered ? 'ol' : 'ul';
-                const items = b.items.map(it => `<li>${renderListItem(it)}</li>`).join('');
-                return `<${tag}>${items}</${tag}>`;
-            }
-            return '';
-        }).join('');
+        return blocks
+            .map((b) => {
+                if (b.type === "paragraph")
+                    return `<p>${runsToHtml(b.runs).replace(/\n/g, "<br/>")}</p>`;
+                if (b.type === "list") {
+                    const tag = b.ordered ? "ol" : "ul";
+                    const items = b.items
+                        .map((it) => `<li>${renderListItem(it)}</li>`)
+                        .join("");
+                    return `<${tag}>${items}</${tag}>`;
+                }
+                return "";
+            })
+            .join("");
     }
 
     function renderListItem(item) {
         // If only one paragraph block return inline, else concatenate rendered blocks
-        if (item.blocks.length === 1 && item.blocks[0].type === 'paragraph') {
-            return runsToHtml(item.blocks[0].runs).replace(/\n/g, '<br/>');
+        if (item.blocks.length === 1 && item.blocks[0].type === "paragraph") {
+            return runsToHtml(item.blocks[0].runs).replace(/\n/g, "<br/>");
         }
         return renderBlocks(item.blocks);
     }

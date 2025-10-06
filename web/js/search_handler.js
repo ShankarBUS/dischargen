@@ -1,3 +1,5 @@
+import { state } from "./core/state.js";
+
 // #region ICD-11 Search Handler for Diagnoses
 
 /* ICD-11 remote search (ClinicalTables API) */
@@ -8,21 +10,25 @@
  * @returns {Promise<Array<{code:string, description:string}>>}
  */
 async function searchICD11(query, limit = 15, signal = null) {
-  const q = (query || '').trim();
+  const q = (query || "").trim();
   if (!q) return [];
   const url = `https://clinicaltables.nlm.nih.gov/api/icd11_codes/v3/search?sf=code,title&terms=${encodeURIComponent(q)}&maxList=${limit}`;
   try {
-    const res = await fetch(url, { signal: signal, headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error('ICD-11 search failed');
+    const res = await fetch(url, {
+      signal: signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error("ICD-11 search failed");
     const json = await res.json();
     // JSON Format: [total, [codes...], null, [ [code, description, kind], ... ] ]
-    if (!Array.isArray(json) || json.length < 4) throw new Error('Unexpected ICD-11 format');
+    if (!Array.isArray(json) || json.length < 4)
+      throw new Error("Unexpected ICD-11 format");
     const data = json[3];
     if (Array.isArray(data)) {
       return data
         .slice(0, limit)
-        .map(row => ({ code: row[0], description: row[1] }))
-        .filter(r => r.code || r.description);
+        .map((row) => ({ code: row[0], description: row[1] }))
+        .filter((r) => r.code || r.description);
     }
     return [];
   } catch (e) {
@@ -40,7 +46,9 @@ function icdCacheLookup(q) {
     if (icdQueryCache.has(prefix)) {
       const arr = icdQueryCache
         .get(prefix)
-        .filter(r => (r.code + ' ' + r.description).toLowerCase().includes(q.toLowerCase()));
+        .filter((r) =>
+          (r.code + " " + r.description).toLowerCase().includes(q.toLowerCase())
+        );
       icdQueryCache.set(q, arr);
       return arr;
     }
@@ -50,7 +58,7 @@ function icdCacheLookup(q) {
 
 let abortController = null;
 export async function icdSearchWithCache(q) {
-  const trimmed = (q || '').trim();
+  const trimmed = (q || "").trim();
   if (!trimmed) return [];
   const cached = icdCacheLookup(trimmed.toLowerCase());
   if (cached && cached.length > 0) return cached;
@@ -78,18 +86,30 @@ export async function icdSearchWithCache(q) {
  * @returns {Promise<Array<{code:string, description:string}>>}
  * */
 async function searchSNOMED(query, limit = 15, signal = null) {
-  const q = (query || '').trim();
+  const q = (query || "").trim();
   if (!q) return [];
   const url = `https://snowstorm.ihtsdotools.org/snowstorm/snomed-ct/browser/MAIN/descriptions?term=${encodeURIComponent(q)}&limit=${limit}&offset=0&active=true&semanticTag=finding`;
   try {
-    const res = await fetch(url, { signal: signal, headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error('SNOMED CT search failed');
+    const res = await fetch(url, {
+      signal: signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error("SNOMED CT search failed");
     const json = await res.json();
-    if (!json || !Array.isArray(json.items)) throw new Error('Unexpected SNOMED CT format');
+    if (!json || !Array.isArray(json.items))
+      throw new Error("Unexpected SNOMED CT format");
     return json.items
       .slice(0, limit)
-      .map(item => item.concept ? (item.concept.pt ? item.concept.pt.term : item.concept.fsn ? item.concept.fsn.term : '') : '')
-      .filter(t => t);
+      .map((item) =>
+        item.concept
+          ? item.concept.pt
+            ? item.concept.pt.term
+            : item.concept.fsn
+              ? item.concept.fsn.term
+              : ""
+          : ""
+      )
+      .filter((t) => t);
   } catch (e) {
     return [];
   }
@@ -105,7 +125,9 @@ function snomedCacheLookup(q) {
     if (snomedQueryCache.has(prefix)) {
       const arr = snomedQueryCache
         .get(prefix)
-        .filter(r => (r.code + ' ' + r.description).toLowerCase().includes(q.toLowerCase()));
+        .filter((r) =>
+          (r.code + " " + r.description).toLowerCase().includes(q.toLowerCase())
+        );
       snomedQueryCache.set(q, arr);
       return arr;
     }
@@ -115,7 +137,7 @@ function snomedCacheLookup(q) {
 
 let abortController1 = null;
 export async function snomedSearchWithCache(q) {
-  const trimmed = (q || '').trim();
+  const trimmed = (q || "").trim();
   if (!trimmed) return [];
   const cached = snomedCacheLookup(trimmed.toLowerCase());
   if (cached && cached.length > 0) return cached;
@@ -137,35 +159,63 @@ export async function snomedSearchWithCache(q) {
 
 /* Department local search (from departments.json) */
 export async function searchDepartments(query, limit = 15) {
-  const q = (query || '').trim().toLowerCase();
+  const q = (query || "").trim().toLowerCase();
   if (!q) return [];
   const allDepartments = await loadDepartments();
 
   if (!q) return allDepartments.slice(0, limit);
   const qq = q.toLowerCase();
-  return allDepartments.filter(d => {
-    if (!d) return false;
-    if ((d.label || '').toLowerCase().includes(qq)) return true;
-    if (Array.isArray(d.abbr) && d.abbr.some(a => (a || '').toLowerCase().includes(qq))) return true;
-    if (Array.isArray(d.alt) && d.alt.some(a => (a || '').toLowerCase().includes(qq))) return true;
-    return false;
-  }).slice(0, limit);
+  return allDepartments
+    .filter((d) => {
+      if (!d) return false;
+      if ((d.label || "").toLowerCase().includes(qq)) return true;
+      if (
+        Array.isArray(d.abbr) &&
+        d.abbr.some((a) => (a || "").toLowerCase().includes(qq))
+      )
+        return true;
+      if (
+        Array.isArray(d.alt) &&
+        d.alt.some((a) => (a || "").toLowerCase().includes(qq))
+      )
+        return true;
+      return false;
+    })
+    .slice(0, limit);
 }
 
-
 export async function loadDepartments() {
-  if (window._departmentsData) return Promise.resolve(window._departmentsData);
-  const res = await fetch('data/departments.json');
-  const data = await res.json();
-  window._departmentsData = data;
-  return data;
+  return loadCatalog("data/departments.json");
 }
 
 export function getDepartmentById(id) {
   if (!id) return null;
-  const allDepartments = window._departmentsData || [];
+  const allDepartments = state.catalogsCache["data/departments.json"] || [];
   if (!allDepartments.length) return null;
-  return allDepartments.find(d => d.id === id) || null;
+  return allDepartments.find((d) => d.id === id) || null;
 }
 
 // #endregion
+
+// #region Drugs Search Handler
+
+/* Drugs local search (from drugs.json) */
+export async function searchDrugs(query, limit = 30) {
+  const q = (query || "").trim().toLowerCase();
+  if (!q) return [];
+  const all = await loadCatalog("data/drugs.json");
+  return all
+    .filter((name) => (name || "").toLowerCase().includes(q))
+    .slice(0, limit);
+}
+
+// #endregion
+
+export async function loadCatalog(path) {
+    if (state.catalogsCache[path]) return state.catalogsCache[path];
+    const res = await fetch(path);
+    if (!res.ok) throw new Error("Catalog load failed: " + path);
+    const json = await res.json();
+    state.catalogsCache[path] = json;
+    return json;
+}

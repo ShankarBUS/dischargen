@@ -14,7 +14,7 @@
     { "label": "WEEKLY THRICE", "description": "Three times per week (commonly Mon/Wed/Fri)." },
     { "label": "WEEKLY", "description": "Once per week (same day each week)." },
     { "label": "HOURLY", "description": "Every hour (24 doses per day unless limited)." },
-    { "label": "5 TIMES", "description": "Five times per day (approx every 4–5 hours while awake)." },
+    { "label": "5 TIMES", "description": "Five times per day (approx every 4-5 hours while awake)." },
     { "label": "6 TIMES", "description": "Six times per day (approx every 4 hours)." },
     { "label": "5 DAYS PER WEEK", "description": "Five days each week (typically weekdays; no doses on two rest days)." }
 ]

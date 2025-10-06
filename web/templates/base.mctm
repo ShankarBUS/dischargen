@@ -129,16 +129,20 @@ chronic_diseases.suggestions: [AIDS, Syphillis]
 
 @text id:family_history multiline default:"No significant family history" @
 
-> General Examination
+// > General Examination
+// 
+// { "Vitals" id:vitals layout:hstack
+// 
+// @number id:pulse label:"Pulse (/min)" @
+// @text id:bp label:"BP (mmHg)" @
+// @number id:rr label:"RR (/min)" @
+// 
+// }
+// 
+// > "Opinions Obtained" optional
+// 
+// @table id:opinions columns:"[Date, Department, Impression, Advice]" @
 
-{ "Vitals" id:vitals layout:hstack
+> "Treatment Given"
 
-@number id:pulse label:"Pulse (/min)" @
-@text id:bp label:"BP (mmHg)" @
-@number id:rr label:"RR (/min)" @
-
-}
-
-> "Opinions Obtained" optional
-
-@table id:opinions columns:"[Date, Department, Impression, Advice]" @
+@medications id:medications_given @
