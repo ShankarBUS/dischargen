@@ -1,0 +1,92 @@
+[
+    {
+        "label": "OD",
+        "description": "Once daily (every 24 hours).",
+        "multiplier": "1"
+    },
+    {
+        "label": "BD",
+        "description": "Twice daily (approximately every 12 hours).",
+        "multiplier": "2"
+    },
+    {
+        "label": "TDS",
+        "description": "Three times daily (approximately every 8 hours).",
+        "multiplier": "3"
+    },
+    {
+        "label": "SOS",
+        "description": "As needed (if required; single or repeated PRN doses per instruction).",
+        "multiplier": "1"
+    },
+    {
+        "label": "QID",
+        "description": "Four times daily (approximately every 6 hours).",
+        "multiplier": "4"
+    },
+    {
+        "label": "STAT",
+        "description": "Immediately (give at once).",
+        "multiplier": "1"
+    },
+    {
+        "label": "HS",
+        "description": "At bedtime (hora somni).",
+        "multiplier": "1"
+    },
+    {
+        "label": "QW",
+        "description": "Once weekly (every 7 days).",
+        "multiplier": "1/7"
+    },
+    {
+        "label": "QM",
+        "description": "Once monthly (every calendar month).",
+        "multiplier": "1/30"
+    },
+    {
+        "label": "ALTERNATE DAYS",
+        "description": "Every other day (dose given on day 1,3,5,...).",
+        "multiplier": "1/2"
+    },
+    {
+        "label": "AD/OD",
+        "description": "Alternate day / once daily hybrid regimen (follow prescriber-specific schedule).",
+        "multiplier": "3/4"
+    },
+    {
+        "label": "WEEKLY TWICE",
+        "description": "Two times per week (e.g. every Monday and Thursday).",
+        "multiplier": "2/7"
+    },
+    {
+        "label": "WEEKLY THRICE",
+        "description": "Three times per week (commonly Mon/Wed/Fri).",
+        "multiplier": "3/7"
+    },
+    {
+        "label": "WEEKLY",
+        "description": "Once per week (same day each week).",
+        "multiplier": "1/7"
+    },
+    {
+        "label": "HOURLY",
+        "description": "Every hour (24 doses per day unless limited).",
+        "multiplier": "24"
+    },
+    {
+        "label": "5 TIMES",
+        "description": "Five times per day (approx every 4-5 hours while awake).",
+        "multiplier": "5"
+    },
+    {
+        "label": "6 TIMES",
+        "description": "Six times per day (approx every 4 hours).",
+        "multiplier": "6"
+    },
+    {
+        "label": "5 DAYS PER WEEK",
+        "description": "Five days each week (typically weekdays; no doses on two rest days).",
+        "multiplier": "5/7"
+    }
+]

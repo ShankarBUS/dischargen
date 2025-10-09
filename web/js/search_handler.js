@@ -197,16 +197,48 @@ export function getDepartmentById(id) {
 
 // #endregion
 
-// #region Drugs Search Handler
+// #region Medications Search Handler
 
 /* Drugs local search (from drugs.json) */
 export async function searchDrugs(query, limit = 30) {
   const q = (query || "").trim().toLowerCase();
-  if (!q) return [];
+  //if (!q) return [];
   const all = await loadCatalog("data/drugs.json");
   return all
     .filter((name) => (name || "").toLowerCase().includes(q))
     .slice(0, limit);
+}
+
+/* Drug Routes local search (from drug_routes.json) */
+export async function searchDrugRoutes(query, limit = 15) {
+  const q = (query || "").trim().toLowerCase();
+  // if (!q) return [];
+  const all = await loadCatalog("data/drug_routes.json");
+  if (!Array.isArray(all)) return [];
+  const scored = all
+    .map((it, idx) => {
+      const label = String(it.label || "");
+      const desc = String(it.description || "");
+      const l = label.toLowerCase();
+      const d = desc.toLowerCase();
+      const inLabel = l.includes(q);
+      const inDesc = d.includes(q);
+      if (!inLabel && !inDesc) return null;
+      // Scoring: exact label > startsWith label > includes label > startsWith desc > includes desc
+      let score = 0;
+      if (l === q) score = 1000;
+      else if (l.startsWith(q)) score = 900;
+      else if (inLabel) score = 800;
+      else if (d.startsWith(q)) score = 700;
+      else if (inDesc) score = 600;
+      // Preserve original order within same score
+      return { item: it, score, idx };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
+    .slice(0, limit)
+    .map((s) => s.item);
+  return scored;
 }
 
 // #endregion

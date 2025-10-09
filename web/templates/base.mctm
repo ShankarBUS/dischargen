@@ -145,4 +145,4 @@ chronic_diseases.suggestions: [AIDS, Syphillis]
 
 > "Treatment Given"
 
-@medications id:medications_given @
+@medications id:medications_given mode:prescription @

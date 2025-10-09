@@ -567,10 +567,6 @@ function completeLanding() {
     landingScreen?.classList.add("hidden");
 }
 
-const IS_FIRST_RUN = (() => {
-    try { return localStorage.getItem(FIRST_RUN_KEY) === "true"; } catch { return true; }
-})();
-
 getStartedBtn?.addEventListener("click", () => {
     startFreshDischarge();
     completeLanding();
@@ -599,7 +595,7 @@ async function init() {
     document.documentElement.style.scrollPaddingTop =
         (document.getElementById("header")?.offsetHeight || 0) + "px";
 
-    if (IS_FIRST_RUN) { landingScreen?.classList.remove("hidden"); }
+    if (localStorage.getItem(FIRST_RUN_KEY) !== "false") { landingScreen?.classList.remove("hidden"); }
     if (LOAD_DEFAULT_TEMPLATE)
         try {
             await loadTemplateRegistry();

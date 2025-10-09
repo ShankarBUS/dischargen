@@ -1,5 +1,12 @@
-import { getDepartmentById, searchDepartments, icdSearchWithCache, snomedSearchWithCache,
-    searchDrugs, loadCatalog } from "./search_handler.js";
+import {
+    getDepartmentById,
+    searchDepartments,
+    icdSearchWithCache,
+    snomedSearchWithCache,
+    searchDrugs,
+    searchDrugRoutes,
+    loadCatalog,
+} from "./search_handler.js";
 import { AutoCompleteBox } from "./components/autocompletebox.js";
 import { DataEditor } from "./components/dataeditor.js";
 import "./components/quantityunit.js";
@@ -8,6 +15,9 @@ import { applyValidation } from "./validation.js";
 import { parseMarkdown, escapeHtml } from "./md_parser.js";
 import { getKnownChronicDiseases, getKnownPastEvents } from "./defaults.js";
 import { QuantityUnitInput } from "./components/quantityunit.js";
+import { toNumberSafe, durationToDays } from "./utils/prescription.js";
+import "./components/frequencyeditor.js";
+import { FrequencyEditor } from "./components/frequencyeditor.js";
 
 /**
  * Render the full UI given parsed AST + meta.
@@ -39,7 +49,8 @@ export function renderUI(root, state) {
 // and must attach appropriate elements to wrapper and register value access in state.fieldRefs.
 const FIELD_RENDERERS = {
     text(node, wrapper, state) {
-        if (node.multiline) return renderMultiLineTextField(node, wrapper, state);
+        if (node.multiline)
+            return renderMultiLineTextField(node, wrapper, state);
         node.fieldType = "text"; // ensure base type
         return renderInputField(node, wrapper, state);
     },
@@ -78,7 +89,7 @@ const FIELD_RENDERERS = {
     hidden: renderHiddenInput,
     chronicdiseases: renderChronicDiseasesField,
     pastevents: renderPastEventsField,
-    medications: renderMedicationsField
+    medications: renderMedicationsField,
 };
 
 function renderNodes(nodes, parent, state, renderUI = true) {
@@ -130,7 +141,11 @@ function renderNodes(nodes, parent, state, renderUI = true) {
     }
 }
 
-function renderSection(node, state, { hideUI = false, renderChildrenUI = true, customBodyBuilder } = {}) {
+function renderSection(
+    node,
+    state,
+    { hideUI = false, renderChildrenUI = true, customBodyBuilder } = {}
+) {
     const sectionEl = document.createElement("div");
     sectionEl.className =
         "section" + (node.id === "__meta__" ? " meta-editor" : "");
@@ -176,7 +191,11 @@ function renderSection(node, state, { hideUI = false, renderChildrenUI = true, c
         checkbox.type = "checkbox";
         checkbox.className = "section-optional-checkbox";
         const prev = node.id && state.sectionOptionals[node.id];
-        const initial = prev ? prev.checked : node.default === false ? false : true;
+        const initial = prev
+            ? prev.checked
+            : node.default === false
+                ? false
+                : true;
         checkbox.checked = initial;
         headerRow.appendChild(checkbox);
 
@@ -207,7 +226,7 @@ function renderSection(node, state, { hideUI = false, renderChildrenUI = true, c
     return sectionEl;
 }
 
-async function buildMetaEditorBody(body, state) {
+function buildMetaEditorBody(body, state) {
     const meta = state.meta || (state.meta = {});
 
     const defaultKeys = {
@@ -251,7 +270,7 @@ async function buildMetaEditorBody(body, state) {
         form.appendChild(row);
     }
 
-    async function addDepartmentRow() {
+    function addDepartmentRow() {
         const row = document.createElement("div");
         row.className = "meta-row";
         const label = document.createElement("label");
@@ -261,8 +280,9 @@ async function buildMetaEditorBody(body, state) {
         const ac = new AutoCompleteBox();
         ac.id = "meta_department";
         ac.setAttribute("placeholder", "Start typing department...");
+        ac.toggleAttribute("empty-shows-all", true);
 
-        ac.fetcher = async (q) => searchDepartments(q, 30);
+        ac.fetcher = searchDepartments;
         ac.getItemLabel = (item) => (item && item.label) || "";
 
         const dept = getDepartmentById(meta.department);
@@ -280,7 +300,7 @@ async function buildMetaEditorBody(body, state) {
 
     addTextRow("Title", "title", false, "Title");
     addTextRow("Hospital Name", "hospital", false, "Hospital");
-    await addDepartmentRow();
+    addDepartmentRow();
     addTextRow("Unit", "unit", false, "e.g. Unit I");
     addTextRow("PDF Header", "pdf_header", true, "Extra header line");
     addTextRow("PDF Footer", "pdf_footer", true, "Footer line");
@@ -430,7 +450,7 @@ function renderDiagnosisField(node, wrapper, state) {
     const ac = new AutoCompleteBox();
     ac.setAttribute("placeholder", node.placeholder || "");
     ac.id = baseId;
-    ac.fetcher = async (q) => icdSearchWithCache(q);
+    ac.fetcher = icdSearchWithCache;
     ac.getItemLabel = (item) =>
         (item &&
             (item.description ||
@@ -439,7 +459,8 @@ function renderDiagnosisField(node, wrapper, state) {
                 item.value ||
                 item.code)) ||
         "";
-    ac.getItemSecondary = (item) => (item && item.code ? String(item.code) : "");
+    ac.getItemSecondary = (item) =>
+        item && item.code ? String(item.code) : "";
 
     const tagList = document.createElement("div");
     tagList.className = "tag-list";
@@ -519,7 +540,6 @@ function renderComplaintsField(node, wrapper, state) {
             createEditor: (rowIndex, col, value, commit) => {
                 const ac = new AutoCompleteBox();
                 ac.placeholder = col.placeholder || "";
-                ac.value = value || "";
                 ac.fetcher = snomedSearchWithCache;
                 ac.getItemLabel = (item) => item || "";
                 ac.addEventListener("commit", (e) => commit(e.detail.value));
@@ -551,7 +571,8 @@ function renderComplaintsField(node, wrapper, state) {
         onAdd: (name) => ({ complaint: name, duration: "", unit: "days" }),
         matchItem: (items, name) =>
             items.some(
-                (it) => (it.complaint || "").toLowerCase() === name.toLowerCase()
+                (it) =>
+                    (it.complaint || "").toLowerCase() === name.toLowerCase()
             ),
     };
 
@@ -702,7 +723,9 @@ function renderPastEventsField(node, wrapper, state) {
         items: knownList,
         onAdd: (name) => ({ event: name, details: "" }),
         matchItem: (items, name) =>
-            items.some((it) => (it.event || "").toLowerCase() === name.toLowerCase()),
+            items.some(
+                (it) => (it.event || "").toLowerCase() === name.toLowerCase()
+            ),
     };
 
     wrapper.appendChild(editor);
@@ -715,8 +738,12 @@ function renderPastEventsField(node, wrapper, state) {
             if (Array.isArray(v)) {
                 const mapped = v
                     .map((it) => {
-                        if (typeof it === "string") return { event: it, details: "" };
-                        return { event: it.event || "", details: it.details || "" };
+                        if (typeof it === "string")
+                            return { event: it, details: "" };
+                        return {
+                            event: it.event || "",
+                            details: it.details || "",
+                        };
                     })
                     .filter((it) => it.event);
                 editor.items = mapped;
@@ -739,7 +766,27 @@ function renderMedicationsField(node, wrapper, state) {
     const editor = new DataEditor();
     editor.setAttribute("add-label", "Add Medication");
 
-    editor.columns = [
+    let isPrescription = /^(prescription|rx)$/i.test(node.mode || "");
+
+    // Toolbar with mode toggle
+    const toolbar = document.createElement("div");
+    toolbar.className = "med-toolbar";
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    const modeLabel = () =>
+        isPrescription
+            ? "Switch to Standard Mode"
+            : "Switch to Prescription Mode";
+    toggleBtn.textContent = modeLabel();
+    toggleBtn.addEventListener("click", () => {
+        isPrescription = !isPrescription;
+        toggleBtn.textContent = modeLabel();
+        rebuildColumns();
+    });
+    toolbar.appendChild(toggleBtn);
+    wrapper.appendChild(toolbar);
+
+    const baseColumns = [
         {
             key: "name",
             label: "Name",
@@ -749,7 +796,6 @@ function renderMedicationsField(node, wrapper, state) {
             createEditor: (rowIndex, col, value, commit) => {
                 const ac = new AutoCompleteBox();
                 ac.placeholder = col.placeholder;
-                ac.value = value || "";
                 ac.fetcher = searchDrugs;
                 ac.getItemLabel = (item) => item || "";
                 ac.addEventListener("commit", (e) => commit(e.detail.value));
@@ -768,38 +814,76 @@ function renderMedicationsField(node, wrapper, state) {
             width: "20%",
             createEditor: (rowIndex, col, value, commit) => {
                 const q = new QuantityUnitInput();
-                q.dataset.role = 'dosage';
+                q.dataset.role = "dosage";
                 q.setAttribute("placeholder", "Dose");
-                q.setSource('data/drug_dosages.json');
-                if (value && typeof value === 'object') {
-                    q.value = value.value || "";
-                    q.unit = value.unit || "";
-                } else if (typeof value === 'string') {
-                    const m = value.match(/^(\S+)\s+(.*)$/);
-                    if (m) { q.value = m[1]; q.unit = m[2]; } else { q.value = value; }
-                }
-                q.addEventListener('change', () => commit({ value: q.value, unit: q.unit }));
+                q.setSource("data/drug_dosages.json");
+                q.addEventListener("change", () => {
+                    commit({ value: q.value, unit: q.unit });
+                });
                 return q;
             },
             getValue: (el) => ({ value: el.value, unit: el.unit }),
             setValue: (el, v) => {
-                if (v && typeof v === 'object') { el.value = v.value || ''; el.unit = v.unit || ''; }
-                else if (typeof v === 'string') { const m = v.match(/^(\S+)\s+(.*)$/); if (m) { el.value = m[1]; el.unit = m[2]; } else el.value = v; }
-            }
+                if (v && typeof v === "object") {
+                    el.value = v.value || "";
+                    el.unit = String(v.unit || "");
+                } else if (typeof v === "string") {
+                    const m = v.match(/^(\S+)\s+(.*)$/);
+                    if (m) {
+                        el.value = m[1];
+                        el.unit = m[2];
+                    } else el.value = v;
+                }
+            },
         },
         {
             key: "route",
             label: "Route",
-            type: "select",
-            source: "data/drug_routes.json",
+            type: "custom",
             width: "10%",
+            placeholder: "Type route (PO, Oral, IV...)",
+            createEditor: (rowIndex, col, value, commit) => {
+                const ac = new AutoCompleteBox();
+                ac.placeholder = col.placeholder || "Route";
+                ac.toggleAttribute("empty-shows-all", true);
+                ac.fetcher = searchDrugRoutes;
+                ac.getItemLabel = (it) => it.label;
+                ac.getItemSecondary = (it) => it.description;
+                ac.addEventListener("commit", (e) => {
+                    const { item, value, fromSuggestion } = e.detail || {};
+                    if (fromSuggestion && item && item.label) commit(item.label);
+                    else if (value) commit(value);
+                });
+                ac.addEventListener("text-changed", () => commit(ac.value));
+                ac.value = value || "";
+                return ac;
+            },
+            getValue: (el) => el.value,
+            setValue: (el, v) => {
+                el.value = v || "";
+            },
         },
         {
             key: "frequency",
             label: "Frequency",
-            type: "select",
-            source: "data/drug_frequency.json",
-            width: "15%",
+            type: "custom",
+            width: "20%",
+            createEditor: (rowIndex, col, value, commit) => {
+                const fe = new FrequencyEditor();
+                fe.addEventListener("frequency-change", (e) => {
+                    if (!e.detail || typeof e.detail.value === "undefined")
+                        return;
+                    const detail = e.detail;
+                    commit({ value: detail.value, total: detail.total });
+                });
+                return fe;
+            },
+            getValue: (el) => ({ value: el.value, total: el.total }),
+            setValue: (el, v) => {
+                if (v && typeof v === "object") {
+                    el.value = v.value || "";
+                } else if (typeof v === "string") el.value = v;
+            },
         },
         {
             key: "duration",
@@ -808,25 +892,66 @@ function renderMedicationsField(node, wrapper, state) {
             width: "15%",
             createEditor: (rowIndex, col, value, commit) => {
                 const q = new QuantityUnitInput();
-                q.dataset.role = 'duration';
+                q.dataset.role = "duration";
                 q.units = _durationUnits;
-                if (value && typeof value === 'object') { q.value = value.value || ''; q.unit = value.unit || 'days'; }
-                else if (typeof value === 'string') { const m = value.match(/^(\d+)\s*(\w+)/); if (m) { q.value = m[1]; q.unit = m[2]; } else q.value = value; }
-                q.addEventListener('change', () => commit({ value: q.value, unit: q.unit }));
+                q.addEventListener("change", () =>
+                    commit({ value: q.value, unit: q.unit })
+                );
                 return q;
             },
             getValue: (el) => ({ value: el.value, unit: el.unit }),
             setValue: (el, v) => {
-                if (v && typeof v === 'object') { el.value = v.value || ''; el.unit = v.unit || 'days'; }
-                else if (typeof v === 'string') { const m = v.match(/^(\d+)\s*(\w+)/); if (m) { el.value = m[1]; el.unit = m[2]; } else el.value = v; }
-            }
+                if (v && typeof v === "object") {
+                    el.value = v.value || "";
+                    el.unit = v.unit || "days";
+                } else if (typeof v === "string") {
+                    const m = v.match(/^(\d+)\s*(\w+)/);
+                    if (m) {
+                        el.value = m[1];
+                        el.unit = m[2];
+                    } else el.value = v;
+                }
+            },
         },
     ];
+
+    const quantityColumn = {
+        key: "quantity",
+        label: "Quantity",
+        type: "computed",
+        width: "10%",
+        placeholder: "",
+        inputType: "number",
+        compute: (row) => {
+            const _dose = toNumberSafe(row.dosage.value);
+            if (!_dose) return "";
+            let _totalperday =
+                row.frequency && typeof row.frequency === "object"
+                    ? toNumberSafe(row.frequency.total)
+                    : 0;
+            const days = durationToDays(row.duration);
+            if (!_totalperday || !days) return "";
+            const total = _dose * _totalperday * days;
+            if (!isFinite(total) || total <= 0) return "";
+            return String(Math.ceil(total));
+        },
+    };
+
+    function rebuildColumns() {
+        editor.columns = isPrescription
+            ? baseColumns.concat(quantityColumn)
+            : baseColumns;
+    }
+
+    rebuildColumns();
+
     editor.quickAdd = {
         items: knownList,
         onAdd: (name) => ({ name: name }),
         matchItem: (items, name) =>
-            items.some((it) => (it.name || "").toLowerCase() === name.toLowerCase()),
+            items.some(
+                (it) => (it.name || "").toLowerCase() === name.toLowerCase()
+            ),
     };
 
     wrapper.appendChild(editor);
@@ -835,32 +960,56 @@ function renderMedicationsField(node, wrapper, state) {
         get value() {
             return (editor.items || [])
                 .map((it) => {
-                    const dosageObj = it.dosage && typeof it.dosage === 'object' ? it.dosage : { value: '', unit: '' };
-                    const durationObj = it.duration && typeof it.duration === 'object' ? it.duration : { value: '', unit: 'days' };
-                    return {
-                        name: it.name || it.name || '',
+                    const dosageObj =
+                        it.dosage && typeof it.dosage === "object"
+                            ? it.dosage
+                            : { value: "", unit: "" };
+                    const durationObj =
+                        it.duration && typeof it.duration === "object"
+                            ? it.duration
+                            : { value: "", unit: "days" };
+                    const base = {
+                        name: it.name || "",
                         dosage: dosageObj,
-                        route: it.route || '',
-                        frequency: it.frequency || '',
-                        duration: durationObj
+                        route: it.route || "",
+                        frequency: it.frequency || "",
+                        duration: durationObj,
+                        quantity: it.quantity || "",
                     };
+                    return base;
                 })
-                .filter(it => it.name);
+                .filter((it) => it.name);
         },
         set value(v) {
             if (Array.isArray(v)) {
                 const mapped = v
                     .map((it) => {
-                        if (typeof it === 'string') return { name: it, dosage: { value: '', unit: '' }, route: '', frequency: '', duration: { value: '', unit: 'days' } };
-                        let dosage = it.dosage;
-                        if (typeof dosage === 'string') {
-                            const m = dosage.match(/^(\S+)\s+(.*)$/); dosage = m ? { value: m[1], unit: m[2] } : { value: dosage, unit: '' };
-                        } else if (!dosage || typeof dosage !== 'object') dosage = { value: '', unit: '' };
-                        let duration = it.duration;
-                        if (typeof duration === 'string') {
-                            const m2 = duration.match(/^(\d+)\s*(\w+)/); duration = m2 ? { value: m2[1], unit: m2[2] } : { value: duration, unit: 'days' };
-                        } else if (!duration || typeof duration !== 'object') duration = { value: '', unit: 'days' };
-                        return { name: it.name || it.name || '', dosage, route: it.route || '', frequency: it.frequency || '', duration };
+                        if (typeof it === "string")
+                            return {
+                                name: it,
+                                dosage: { value: "", unit: "" },
+                                route: "",
+                                frequency: "",
+                                duration: { value: "", unit: "days" },
+                            };
+
+                        const dosageObj =
+                            it.dosage && typeof it.dosage === "object"
+                                ? it.dosage
+                                : { value: "", unit: "" };
+                        const durationObj =
+                            it.duration && typeof it.duration === "object"
+                                ? it.duration
+                                : { value: "", unit: "days" };
+                        const base = {
+                            name: it.name || "",
+                            dosage: dosageObj,
+                            route: it.route || "",
+                            frequency: it.frequency || "",
+                            duration: durationObj,
+                            quantity: it.quantity || "",
+                        };
+                        return base;
                     })
                     .filter((it) => it.name);
                 editor.items = mapped;
@@ -924,8 +1073,10 @@ async function loadSelectOptions(selectEl, node) {
         const data = await loadCatalog(node.source);
         data.forEach((opt) => {
             const o = document.createElement("option");
-            o.value = opt.value || opt.code || opt.id || opt;
-            o.textContent = opt.label || opt.value || opt.code || opt;
+            // Prefer explicit value; fall back to key/id/label
+            o.value = opt.value || opt.code || opt.id || opt.label || opt;
+            // Prefer human-readable description/name; fallback to label then value
+            o.textContent = opt.description || opt.label || opt.value || opt.code || opt;
             selectEl.appendChild(o);
         });
     } else if (node.options) {
@@ -1056,7 +1207,9 @@ export function reevaluateConditions(root, state) {
     const rows = root.querySelectorAll("[data-condition]");
     rows.forEach((row) => {
         const expr = row.dataset.condition;
-        const visible = evaluateCondition(expr, (id) => getFieldValue(id, state));
+        const visible = evaluateCondition(expr, (id) =>
+            getFieldValue(id, state)
+        );
         row.classList.toggle("hidden", !visible);
     });
 }
@@ -1088,7 +1241,10 @@ export function evaluateComputedAll(state) {
                 {
                     has(_, prop) {
                         if (typeof prop === "symbol") return false;
-                        return Object.prototype.hasOwnProperty.call(state.fieldRefs, prop);
+                        return Object.prototype.hasOwnProperty.call(
+                            state.fieldRefs,
+                            prop
+                        );
                     },
                     get(_, prop) {
                         if (typeof prop === "symbol") return undefined;
@@ -1100,7 +1256,10 @@ export function evaluateComputedAll(state) {
             const fn = new Function("ctx", `with(ctx){ return ${formula}; }`);
             let val = fn(ctx);
             if (node.format && /^decimal\(\d+\)$/.test(node.format)) {
-                const d = parseInt(node.format.match(/decimal\((\d+)\)/)[1], 10);
+                const d = parseInt(
+                    node.format.match(/decimal\((\d+)\)/)[1],
+                    10
+                );
                 if (typeof val === "number") val = val.toFixed(d);
             }
             state.fieldRefs[node.id].value = (val ?? "").toString();
@@ -1127,7 +1286,10 @@ export function renderMarkdownHtml(ast) {
         return blocks
             .map((b) => {
                 if (b.type === "paragraph")
-                    return `<p>${runsToHtml(b.runs).replace(/\n/g, "<br/>")}</p>`;
+                    return `<p>${runsToHtml(b.runs).replace(
+                        /\n/g,
+                        "<br/>"
+                    )}</p>`;
                 if (b.type === "list") {
                     const tag = b.ordered ? "ol" : "ul";
                     const items = b.items
