@@ -187,7 +187,7 @@ export class AutoCompleteBox extends HTMLElement {
                     const label = _escape(this.getItemLabel(it) || "");
                     const secondary = _escape(this.getItemSecondary(it) || "");
                     return secondary
-                        ? `<div data-idx='${i}'><span>${label}</span><span>${secondary}</span></div>`
+                        ? `<div data-idx='${i}'><span>${label}</span><span class="ac-secondary-label">${secondary}</span></div>`
                         : `<div data-idx='${i}'>${label}</div>`;
                 })
                 .join("");

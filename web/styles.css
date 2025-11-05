@@ -713,8 +713,6 @@ select {
         max-height: 270px;
         overflow-y: auto;
         transition: all var(--t-med) allow-discrete;
-        top: calc(anchor(bottom) + 1px);
-        justify-self: anchor-center;
         opacity: 0;
         transform: translateY(-10px);
     }
@@ -884,6 +882,7 @@ button[disabled] {
     input {
         width: 100%;
     }
+
     position: relative;
 }
 
@@ -893,15 +892,16 @@ button[disabled] {
     border-radius: var(--radius-md);
     background: var(--c-surface);
     box-shadow: var(--shadow-lg);
-    max-height: 270px;
     overflow-y: auto;
     margin: 2px 0 0 0;
     position: absolute;
-    top: anchor(bottom);
-    justify-self: anchor-center;
-    width: anchor-size(width);
-    position-try-fallbacks: top left;
-    position-try-order: most-width;
+    width: auto;
+    max-width: 80vw;
+    position-area: bottom center;
+    position-visibility: anchors-visible;
+    position-try-fallbacks: top center;
+    position-try-order: most-height;
+    max-height: min(270px, 50vh);
     opacity: 0;
     transform: translateY(-10px);
     transition: all var(--t-med) allow-discrete;
@@ -938,6 +938,11 @@ button[disabled] {
 
     & div.active {
         background: var(--c-highlight);
+    }
+
+    & .ac-secondary-label {
+        font-size: var(--fs-2);
+        color: var(--c-text-soft);
     }
 }
 

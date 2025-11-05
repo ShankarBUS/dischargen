@@ -768,24 +768,6 @@ function renderMedicationsField(node, wrapper, state) {
 
     let isPrescription = /^(prescription|rx)$/i.test(node.mode || "");
 
-    // Toolbar with mode toggle
-    const toolbar = document.createElement("div");
-    toolbar.className = "med-toolbar";
-    const toggleBtn = document.createElement("button");
-    toggleBtn.type = "button";
-    const modeLabel = () =>
-        isPrescription
-            ? "Switch to Standard Mode"
-            : "Switch to Prescription Mode";
-    toggleBtn.textContent = modeLabel();
-    toggleBtn.addEventListener("click", () => {
-        isPrescription = !isPrescription;
-        toggleBtn.textContent = modeLabel();
-        rebuildColumns();
-    });
-    toolbar.appendChild(toggleBtn);
-    wrapper.appendChild(toolbar);
-
     const baseColumns = [
         {
             key: "name",
@@ -937,13 +919,9 @@ function renderMedicationsField(node, wrapper, state) {
         },
     };
 
-    function rebuildColumns() {
-        editor.columns = isPrescription
-            ? baseColumns.concat(quantityColumn)
-            : baseColumns;
-    }
-
-    rebuildColumns();
+    editor.columns = isPrescription
+        ? baseColumns.concat(quantityColumn)
+        : baseColumns;
 
     editor.quickAdd = {
         items: knownList,

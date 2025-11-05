@@ -2,6 +2,7 @@ import { evaluateCondition } from "./conditional.js";
 import { parseMarkdown } from "./md_parser.js";
 import { getKnownChronicDiseases } from "./defaults.js";
 import { getDepartmentById } from "./search_handler.js";
+import { computeMedicationDisplay } from "./utils/prescription.js";
 
 let fontsLoaded = false;
 async function ensurePdfMakeFonts() {
@@ -107,7 +108,7 @@ function renderFieldNode(node, ctx) {
     }
     if (node.fieldType === "table") {
         const tableVal = getValue(node.id) || [];
-        const { headers, rows } = buildTableRows(node, tableVal);
+        const { headers, rows } = buildTableRows(node.columns, tableVal);
         if (!headers.length || !rows.length) return [];
         const bodyRows = rows.map((r) =>
             r.map((c) => ({ text: toRunsWithFonts(c) }))
@@ -232,33 +233,78 @@ function renderFieldNode(node, ctx) {
     if (node.fieldType === "medications") {
         const raw = getValue(node.id);
         const list = Array.isArray(raw) ? raw : [];
-        const items = list
-            .map((o) => {
-                if (!o || !o.name) return null;
-                const dose = o.dosage
-                    ? ` ${o.dosage.value}${o.dosage.unit ? " " + o.dosage.unit : ""}`
-                    : "";
-                const route = o.route ? ` ${o.route}` : "";
-                const freq = o.frequency ? ` ${o.frequency}` : "";
-                const dur = o.duration
-                    ? ` × ${o.duration.value}${o.duration.unit ? " " + o.duration.unit : ""}`
-                    : "";
-                return `${o.name}${dose}${route}${freq}${dur}`.trim();
-            })
-            .filter(Boolean);
-        if (!items.length) return [];
-        const blocks = [];
-        if (node.label)
-            blocks.push({
-                text: toRunsWithFonts(node.label + ":"),
-                style: "sectionLabel",
-                margin: [0, 6, 0, 2],
+        if (node.mode === "prescription" || node.mode === "rx") {
+            const headers = ["Name", "Dosage", "Route", "Frequency", "Duration", "Quantity"];
+            const rows = list
+                .map((o) => {
+                    if (!o || !o.name) return null;
+                    const d = computeMedicationDisplay(o);
+                    return [
+                        d.name,
+                        d.dose,
+                        d.route,
+                        d.hideFreq ? "" : d.frequency,
+                        d.duration,
+                        d.quantity,
+                    ];
+                })
+                .filter(Boolean);
+
+            if (!rows.length) return [];
+
+            const bodyRows = rows.map((r) =>
+                r.map((c) => ({ text: toRunsWithFonts(c) }))
+            );
+            const arr = [];
+            if (node.label)
+                arr.push({
+                    text: toRunsWithFonts(node.label),
+                    style: "sectionLabel",
+                    margin: [0, 6, 0, 4],
+                });
+            arr.push({
+                table: {
+                    headerRows: 1,
+                    widths: ["*", "auto", "auto", "auto", "auto", "auto"],
+                    body: [
+                        headers.map((h) => ({ text: toRunsWithFonts(h), bold: true })),
+                        ...bodyRows,
+                    ],
+                },
+                layout: "lightHorizontalLines",
+                fontSize: 10,
+                margin: [0, 0, 0, 8],
             });
-        blocks.push({
-            ul: items.map((t) => ({ text: toRunsWithFonts(t) })),
-            margin: [0, 0, 0, 4],
-        });
-        return blocks;
+            return arr;
+        }
+        else {
+            const items = list
+                .map((o) => {
+                    if (!o || !o.name) return null;
+                    const d = computeMedicationDisplay(o);
+                    const header = [d.name, d.dose, d.route]
+                        .filter(Boolean)
+                        .join(" ");
+                    const suffix = [d.hideFreq ? "" : d.frequency, d.duration && `× ${d.duration}`]
+                        .filter(Boolean)
+                        .join(" ");
+                    return [header, suffix].filter(Boolean).join(" ").trim();
+                })
+                .filter(Boolean);
+            if (!items.length) return [];
+            const blocks = [];
+            if (node.label)
+                blocks.push({
+                    text: toRunsWithFonts(node.label + ":"),
+                    style: "sectionLabel",
+                    margin: [0, 6, 0, 2],
+                });
+            blocks.push({
+                ul: items.map((t) => ({ text: toRunsWithFonts(t) })),
+                margin: [0, 0, 0, 4],
+            });
+            return blocks;
+        }
     }
     const line = buildFieldLine(node, getValue(node.id));
     if (!line) return [];
@@ -425,11 +471,10 @@ export async function renderPDF(meta = {}, ast = [], values = {}) {
     };
 }
 
-function buildTableRows(node, tableVal) {
-    const headers = node.columns;
+function buildTableRows(headers, tableVal) {
     const rows = Array.isArray(tableVal) ? tableVal : [];
     const body = rows
-        .map((r) => headers.map((h) => str(r[h])))
+        .map((r) => headers.map((h) => str(r[Object.keys(r).find((k) => k.toLowerCase() === h.toLowerCase())])))
         .filter((r) => r.some((c) => c && c.trim() !== ""));
     return { headers, rows: body };
 }

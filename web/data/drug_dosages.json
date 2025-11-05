@@ -1,4 +1,6 @@
 [
+    { "label": "tablet", "aliases": ["tab", "tabs", "tablets"] },
+    { "label": "capsule", "aliases": ["cap", "caps", "capsules"] },
     { "label": "mg", "aliases": ["milligram", "milligrams", "mg.", "mgs"] },
     { "label": "g", "aliases": ["gram", "grams", "gm", "gms", "g."] },
     { "label": "mcg", "aliases": ["microgram", "micrograms", "μg", "ug", "mcg."] },
@@ -6,8 +8,6 @@
     { "label": "mL", "aliases": ["ml", "milliliter", "millilitre", "milliliters", "millilitres", "cc", "c.c."] },
     { "label": "IU", "aliases": ["international unit", "international units", "iu", "i.u."] },
     { "label": "unit", "aliases": ["units", "u", "Unit", "Units", "U"] },
-    { "label": "tablet", "aliases": ["tab", "tabs", "tablets"] },
-    { "label": "capsule", "aliases": ["cap", "caps", "capsules"] },
     { "label": "drop", "aliases": ["gtt", "gtts", "drops"] },
     { "label": "puff", "aliases": ["actuation", "actuations", "spray", "sprays"] },
     { "label": "teaspoon", "aliases": ["tsp", "tea spoon", "tea-spoon", "teaspoons"] },

@@ -14,7 +14,6 @@
     { "label": "PR", "description": "Rectal" },
     { "label": "PV", "description": "Vaginal" },
     { "label": "BUCCAL", "description": "Buccal" },
-
     { "label": "CONJUNC", "description": "Conjunctival" },
     { "label": "CUTAN", "description": "Cutaneous" },
     { "label": "DENTAL", "description": "Dental" },
@@ -47,7 +46,6 @@
     { "label": "I-CORONAL", "description": "Intracoronal, dental" },
     { "label": "I-CORONARY", "description": "Intracoronary" },
     { "label": "I-CORPOR", "description": "Intracorporus cavernosum" },
-    
     { "label": "I-DISCAL", "description": "Intradiscal" },
     { "label": "I-DUCTAL", "description": "Intraductal" },
     { "label": "I-DUOD", "description": "Intraduodenal" },
@@ -90,10 +88,8 @@
     { "label": "IRRIG", "description": "Irrigation" },
     { "label": "LARYN", "description": "Laryngeal" },
     { "label": "NG", "description": "Nasogastric" },
-    
     { "label": "OCCLUS", "description": "Occlusive dressing technique" },
     { "label": "ORO", "description": "Oropharyngeal" },
-    
     { "label": "PAREN", "description": "Parenteral" },
     { "label": "PERCUT", "description": "Percutaneous" },
     { "label": "P-ARTIC", "description": "Periarticular" },
@@ -109,7 +105,6 @@
     { "label": "T-PLACENT", "description": "Transplacental" },
     { "label": "T-TRACHE", "description": "Transtracheal" },
     { "label": "T-TYMPAN", "description": "Transtympanic" },
-    
     { "label": "URETER", "description": "Ureteral" },
     { "label": "URETH", "description": "Urethral" }
 ]
