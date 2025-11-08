@@ -39,6 +39,7 @@ export const MCTM_SPEC = {
         "pattern",
         "required",
         "default",
+        "unit",
         "if",
         "pdf",
         "ui",
@@ -144,7 +145,7 @@ export const MCTM_SPEC = {
     static: { required: [], optional: ["content", "if", "pdf", "ui"] },
     computed: {
       required: ["id", "formula"],
-      optional: ["label", "format", "if", "pdf", "ui"],
+      optional: ["label", "format", "unit", "if", "pdf", "ui"],
     },
     hidden: { required: ["id"], optional: ["default", "pdf", "ui"] },
   },
@@ -232,6 +233,16 @@ export function lintMCTM({ source, ast, meta, overrides = [] }) {
           warn(`Unknown group layout '${node.layout}'`, node.line)
         );
       if (node.if) validateConditionRefs(node, idCount, diagnostics);
+      // Toggle group sanity
+      if (node.toggle === true || String(node.toggle).toLowerCase() === "true") {
+        if (!node.id)
+          diagnostics.push(
+            warn(
+              `Toggle group should have an 'id' so its state can be referenced and exported`,
+              node.line
+            )
+          );
+      }
     }
   });
 

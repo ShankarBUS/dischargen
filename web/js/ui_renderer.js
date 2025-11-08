@@ -322,10 +322,29 @@ function renderGroup(node, state, renderNodes) {
     if (node.if) wrapper.dataset.condition = node.if;
     if (node.pdf && node.pdf.hidden) wrapper.dataset.pdfHidden = "true";
     if (node.ui && node.ui.hidden) wrapper.dataset.uiHidden = "true";
-    if (node.title) {
-        const h = document.createElement("h2");
-        h.textContent = node.title;
-        wrapper.appendChild(h);
+    const isToggle = node.toggle === true || String(node.toggle).toLowerCase() === "true";
+    let headerRow = null;
+    let toggleCb = null;
+    if (node.title || isToggle) {
+        headerRow = document.createElement("div");
+        headerRow.className = "group-header";
+        if (isToggle) {
+            toggleCb = document.createElement("input");
+            toggleCb.type = "checkbox";
+            // default: checked unless default === false
+            toggleCb.checked = node.default === false ? false : true;
+            headerRow.appendChild(toggleCb);
+            if (node.id) {
+                // Expose group toggle as a field ref so conditions can depend on it
+                state.fieldRefs[node.id] = toggleCb;
+            }
+        }
+        if (node.title) {
+            const h = document.createElement("h2");
+            h.textContent = node.title;
+            headerRow.appendChild(h);
+        }
+        wrapper.appendChild(headerRow);
     }
 
     const layout = String(node.layout || "vstack");
@@ -338,6 +357,13 @@ function renderGroup(node, state, renderNodes) {
         if (m) body.classList.add("layout-columns", `cols-${m[1]}`);
         else body.classList.add("layout-vstack");
     }
+
+    const syncBodyVisibility = () => {
+        if (!isToggle) return;
+        const on = !!(toggleCb && toggleCb.checked);
+        wrapper.classList.toggle("disabled", !on);
+        body.style.display = on ? "" : "none";
+    };
 
     (node.children || []).forEach((ch) => {
         if (!ch || ch.type === "include") return;
@@ -357,6 +383,13 @@ function renderGroup(node, state, renderNodes) {
         }
     });
     wrapper.appendChild(body);
+    if (toggleCb) {
+        toggleCb.addEventListener("change", () => {
+            syncBodyVisibility();
+        });
+        // initialize
+        syncBodyVisibility();
+    }
     return wrapper;
 }
 
@@ -369,6 +402,8 @@ function renderField(node, state) {
     if (node.label) {
         const label = document.createElement("label");
         label.textContent = node.label;
+        if ((node.fieldType === "number" || node.fieldType === "computed") && node.unit)
+            label.textContent += ` (${node.unit})`;
         label.htmlFor = node.id;
         if (node.required) label.classList.add("required");
         wrapper.appendChild(label);
@@ -536,7 +571,7 @@ function renderComplaintsField(node, wrapper, state) {
             label: "Complaint",
             type: "custom",
             placeholder: node.placeholder || "Complaint",
-            width: "50%",
+            width: "*",
             createEditor: (rowIndex, col, value, commit) => {
                 const ac = new AutoCompleteBox();
                 ac.placeholder = col.placeholder || "";
@@ -554,21 +589,39 @@ function renderComplaintsField(node, wrapper, state) {
         {
             key: "duration",
             label: "Duration",
-            type: "number",
-            placeholder: "Duration",
-        },
-        {
-            key: "unit",
-            label: "Unit",
-            type: "select",
-            options: _durationUnits,
-            default: "days",
+            type: "custom",
+            width: "30%",
+            createEditor: (rowIndex, col, value, commit) => {
+                const q = new QuantityUnitInput();
+                q.dataset.role = "duration";
+                q.units = _durationUnits;
+                q.addEventListener("change", () =>
+                    commit({ value: q.value, unit: q.unit })
+                );
+                return q;
+            },
+            getValue: (el) => ({ value: el.value, unit: el.unit }),
+            setValue: (el, v) => {
+                if (v && typeof v === "object") {
+                    el.value = v.value || "";
+                    el.unit = v.unit || "days";
+                } else if (typeof v === "string") {
+                    const m = v.match(/^(\d+)\s*(\w+)/);
+                    if (m) {
+                        el.value = m[1];
+                        el.unit = m[2];
+                    } else el.value = v;
+                } else {
+                    el.value = "";
+                    el.unit = "days";
+                }
+            },
         },
     ];
 
     editor.quickAdd = {
         items: knownList,
-        onAdd: (name) => ({ complaint: name, duration: "", unit: "days" }),
+        onAdd: (name) => ({ complaint: name, duration: { value: "", unit: "days" } }),
         matchItem: (items, name) =>
             items.some(
                 (it) =>
@@ -581,20 +634,30 @@ function renderComplaintsField(node, wrapper, state) {
     state.fieldRefs[node.id] = {
         get value() {
             return (editor.items || [])
-                .map((it) => ({
-                    complaint: it.complaint || "",
-                    duration: it.duration || "",
-                    unit: it.unit || "days",
-                }))
+                .map((it) => {
+                    const durationObj =
+                        it.duration && typeof it.duration === "object"
+                            ? it.duration
+                            : { value: it.duration || "", unit: it.unit || "days" };
+                    return {
+                        complaint: it.complaint || "",
+                        duration: durationObj,
+                    };
+                })
                 .filter((it) => it.complaint);
         },
         set value(v) {
             if (Array.isArray(v)) {
-                editor.items = v.map((it) => ({
-                    complaint: it.complaint || "",
-                    duration: it.duration || "",
-                    unit: it.unit || "days",
-                }));
+                editor.items = v.map((it) => {
+                    const durationObj =
+                        it.duration && typeof it.duration === "object"
+                            ? it.duration
+                            : { value: it.duration || "", unit: it.unit || "days" };
+                    return {
+                        complaint: it.complaint || it.name || "",
+                        duration: durationObj,
+                    };
+                });
             } else {
                 editor.items = [];
             }
@@ -619,29 +682,45 @@ function renderChronicDiseasesField(node, wrapper, state) {
             label: "Chronic Disease",
             type: "text",
             placeholder: "e.g. Diabetes Mellitus",
-            width: "35%",
+            width: "*",
         },
         {
             key: "duration",
             label: "Duration",
-            type: "number",
-            placeholder: "e.g. 5",
-            width: "15%",
-        },
-        {
-            key: "unit",
-            label: "Unit",
-            type: "select",
-            options: _durationUnits,
-            default: "years",
-            width: "15%",
+            type: "custom",
+            width: "auto",
+            createEditor: (rowIndex, col, value, commit) => {
+                const q = new QuantityUnitInput();
+                q.dataset.role = "duration";
+                q.units = _durationUnits;
+                q.addEventListener("change", () =>
+                    commit({ value: q.value, unit: q.unit })
+                );
+                return q;
+            },
+            getValue: (el) => ({ value: el.value, unit: el.unit }),
+            setValue: (el, v) => {
+                if (v && typeof v === "object") {
+                    el.value = v.value || "";
+                    el.unit = v.unit || "years";
+                } else if (typeof v === "string") {
+                    const m = v.match(/^(\d+)\s*(\w+)/);
+                    if (m) {
+                        el.value = m[1];
+                        el.unit = m[2];
+                    } else el.value = v;
+                } else {
+                    el.value = "";
+                    el.unit = "years";
+                }
+            },
         },
         {
             key: "treatment",
             label: "Treatment",
             type: "text",
             placeholder: "e.g. Metformin",
-            width: "35%",
+            width: "auto",
         },
     ];
 
@@ -649,8 +728,7 @@ function renderChronicDiseasesField(node, wrapper, state) {
         items: knownList,
         onAdd: (name) => ({
             disease: name,
-            duration: "",
-            unit: "years",
+            duration: { value: "", unit: "years" },
             treatment: "",
         }),
         matchItem: (items, name) =>
@@ -663,7 +741,19 @@ function renderChronicDiseasesField(node, wrapper, state) {
 
     state.fieldRefs[node.id] = {
         get value() {
-            return (editor.items || []).filter((it) => it.disease);
+            return (editor.items || [])
+                .map((it) => {
+                    const durationObj =
+                        it.duration && typeof it.duration === "object"
+                            ? it.duration
+                            : { value: it.duration || "", unit: it.unit || "years" };
+                    return {
+                        disease: it.disease,
+                        duration: durationObj,
+                        treatment: it.treatment,
+                    };
+                })
+                .filter((it) => it.disease);
         },
         set value(v) {
             if (Array.isArray(v)) {
@@ -672,14 +762,16 @@ function renderChronicDiseasesField(node, wrapper, state) {
                         if (typeof it === "string")
                             return {
                                 disease: it,
-                                duration: "",
-                                unit: "years",
+                                duration: { value: "", unit: "years" },
                                 treatment: "",
                             };
+                        const durationObj =
+                            it.duration && typeof it.duration === "object"
+                                ? it.duration
+                                : { value: it.duration || "", unit: it.unit || "years" };
                         return {
                             disease: it.disease || it.name || "",
-                            duration: it.duration || "",
-                            unit: it.unit || "years",
+                            duration: durationObj,
                             treatment: it.treatment || "",
                         };
                     })
@@ -1065,11 +1157,14 @@ async function loadSelectOptions(selectEl, node) {
                 .map((o) => o.trim());
         arr.forEach((v) => {
             const o = document.createElement("option");
-            o.value = v;
-            o.textContent = v;
+            const isPlaceholder = v === "_";
+            o.value = isPlaceholder ? null : v;
+            o.textContent = isPlaceholder ? node.placeholder ?? "Select an option" : v;
+            o.style.display = isPlaceholder ? "none" : "block";
             selectEl.appendChild(o);
         });
     }
+    selectEl.selectedIndex = -1;
 }
 
 function renderTableField(node, wrapper, state) {

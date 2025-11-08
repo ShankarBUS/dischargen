@@ -98,8 +98,9 @@ async function buildHeader(meta) {
     return blocks;
 }
 
-function renderFieldNode(node, ctx) {
+function renderFieldNode(node, ctx, options = {}) {
     if (!nodeVisible(node, ctx) || node.type !== "field") return [];
+    const hideLabels = !!options.hideLabels;
     const getValue = ctx.getValue;
     if (node.fieldType === "static") {
         const md = String(node.content || "").trim();
@@ -114,7 +115,7 @@ function renderFieldNode(node, ctx) {
             r.map((c) => ({ text: toRunsWithFonts(c) }))
         );
         const arr = [];
-        if (node.label)
+        if (node.label && !hideLabels)
             arr.push({
                 text: toRunsWithFonts(node.label),
                 style: "sectionLabel",
@@ -142,7 +143,7 @@ function renderFieldNode(node, ctx) {
         const val = String(getValue(node.id) || "").trim();
         if (!val) return [];
         const arr = [];
-        if (node.label)
+        if (node.label && !hideLabels)
             arr.push({
                 text: toRunsWithFonts(node.label + ":"),
                 style: "sectionLabel",
@@ -293,7 +294,7 @@ function renderFieldNode(node, ctx) {
                 .filter(Boolean);
             if (!items.length) return [];
             const blocks = [];
-            if (node.label)
+            if (node.label && !hideLabels)
                 blocks.push({
                     text: toRunsWithFonts(node.label + ":"),
                     style: "sectionLabel",
@@ -306,32 +307,52 @@ function renderFieldNode(node, ctx) {
             return blocks;
         }
     }
-    const line = buildFieldLine(node, getValue(node.id));
+    const line = buildFieldLine(node, getValue(node.id), { hideLabels });
     if (!line) return [];
     return [{ text: toRunsWithFonts(line), margin: [0, 0, 0, 4] }];
 }
 
-async function renderGroupNode(node, ctx) {
+async function renderGroupNode(node, ctx, options = {}) {
     if (!nodeVisible(node, ctx)) return [];
+    const inheritedHideLabels = !!options.hideLabels;
+    const groupHidesLabels = !!(node.pdf && (node.pdf.hidelabels === true || String(node.pdf.hidelabels).toLowerCase() === "true"));
+    const hideLabelsForChildren = inheritedHideLabels || groupHidesLabels;
+    const isToggle = node.toggle === true || String(node.toggle).toLowerCase() === "true";
+    if (isToggle) {
+        const val = ctx.getValue(node.id);
+        const checked = !!val;
+        if (!checked) {
+            // If unchecked and a falsevalue is provided, render a single line "Title: falsevalue"; else render nothing
+            const fv = node.falsevalue ?? "(-)";
+            if (fv) {
+                const line = `${node.title ? node.title + ": " : ""}${fv}`.trim();
+                if (line) return [{ text: toRunsWithFonts(line), margin: [0, 0, 0, 4] }];
+            }
+            return [];
+        }
+    }
+
     const layout = String(node.layout || "vstack").toLowerCase();
     const children = node.children || [];
     const childBlocks = [];
     for (const ch of children) {
         if (!ch) continue;
         if (ch.type === "group") {
-            const nested = await renderGroupNode(ch, ctx);
+            const nested = await renderGroupNode(ch, ctx, { hideLabels: hideLabelsForChildren });
             if (nested.length) childBlocks.push(nested);
             continue;
         }
         if (ch.type === "field") {
-            const frags = renderFieldNode(ch, ctx);
+            const frags = renderFieldNode(ch, ctx, { hideLabels: hideLabelsForChildren });
             if (frags.length) childBlocks.push(frags);
         }
     }
     const out = [];
-    const titleNode = node.title
+    const title = node.title ? node.title.trim() +
+        (node.toggle ? ": " + (node.truevalue ? node.truevalue : "(+)") : "") : ""; // Append truevalue to title if toggle
+    const titleNode = title
         ? {
-            text: toRunsWithFonts(node.title),
+            text: toRunsWithFonts(title),
             style: "sectionLabel",
             margin: [0, 6, 0, 4],
         }
@@ -479,9 +500,10 @@ function buildTableRows(headers, tableVal) {
     return { headers, rows: body };
 }
 
-function buildFieldLine(node, val) {
+function buildFieldLine(node, val, options = {}) {
+    const hideLabels = !!options.hideLabels;
     if (node.fieldType === "hidden") return null; // skip hidden in PDF
-    const label = node.label ? `${node.label}: ` : "";
+    const label = node.label && !hideLabels ? `${node.label}: ` : "";
     let text = "";
     switch (node.fieldType) {
         case "diagnosis": {
@@ -506,9 +528,12 @@ function buildFieldLine(node, val) {
                 text = val ? node.truevalue || "(+)" : node.falsevalue || "(-)";
             break;
         }
-        case "computed": {
+        case "computed":
+        case "number": {
             if (val !== undefined && val !== null && val !== 0 && val !== "0")
                 text = str(val);
+            if (node.unit)
+                text += ` ${node.unit}`;
             break;
         }
         case "date": {

@@ -122,10 +122,10 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 | Type | Required | Common Optional | Notes |
 |------|----------|------------------------------------------------------------|-------|
 | text | id | label, placeholder, multiline, pattern, required, default, if, pdf.hidden, ui.hidden | Single/multi-line text input |
-| number | id | label, placeholder, min, max, pattern, required, default, if, pdf.hidden, ui.hidden | Numeric input |
+| number | id | label, placeholder, min, max, pattern, required, default, unit, if, pdf.hidden, ui.hidden | Numeric input (supports unit suffix) |
 | checkbox | id | label, trueValue, falseValue, required, default, if, pdf.hidden, ui.hidden | Boolean input |
 | date | id | label, required, default, if, pdf.hidden, ui.hidden | Date string |
-| select | id | label, options, source, multiple, required, default, if, pdf.hidden, ui.hidden | Inline `options:[A,B,C]` or external `source:<path>` |
+| select | id | label, placeholder, options, source, multiple, required, default, if, pdf.hidden, ui.hidden | Inline `options:[A,B,C]` or external `source:<path>` |
 | table | id | label, columns, required, default, if, pdf.hidden, ui.hidden | Dynamic rows per column |
 | list | id | label, placeholder, required, default, if, pdf.hidden, ui.hidden | Simple repeating free-text list |
 | complaints | id | label, placeholder, suggestions, required, default, if, pdf.hidden, ui.hidden | Complaints widget |
@@ -133,7 +133,7 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 | chronicdiseases | id | label, suggestions, shownegatives, required, default, if, pdf.hidden, ui.hidden | Structured chronic disease list (disease, duration, unit, treatment) |
 | pastevents | id | label, suggestions, required, default, if, pdf.hidden, ui.hidden | Past medical/surgical events list |
 | static | (none) | content, if, pdf.hidden, ui.hidden | Body preserved as `content` (content shown when present) |
-| computed | id, formula | label, format, if, pdf.hidden, ui.hidden | Expression evaluated at runtime |
+| computed | id, formula | label, format, unit, if, pdf.hidden, ui.hidden | Expression evaluated at runtime (supports unit suffix) |
 | hidden | id | default, pdf.hidden (implicit), ui.hidden | Hidden value (always omitted from PDF) |
 
 Notes:
@@ -219,7 +219,7 @@ Groups provide structural & layout control inside sections or other groups.
 
 Syntax:
 ```
-{ "Group Title" id:optional_id layout:<layout> if:<expr>
+{ "Group Title" id:optional_id layout:<layout> if:<expr> toggle default:false truevalue:"(+)" falsevalue:"(-)"
   @text id:bp label:"Blood Pressure" @
   { "Nested" layout:hstack
     @number id:pulse label:"Pulse" @
@@ -235,15 +235,22 @@ Properties:
   - `hstack` horizontal columns (one per child)
   - `columns-N` grid with N columns (e.g., `columns-2`, `columns-3`, ...)
 - `if:` conditional visibility (same semantics as for fields/sections)
+- `toggle` (flag): when present (boolean true), the group becomes user-toggleable via a checkbox rendered in the UI alongside its title. Toggling enables/disables (hides grays out) all descendant fields in the interactive UI and controls PDF/export inclusion.
+  - When `toggle` is set and the group has an `id`, a synthetic boolean field reference is exposed under that `id` so `if:` conditions and computed formulas MAY reference the toggle state (checked -> true, unchecked -> false).
+  - `default:false` MAY be supplied to start the toggle unchecked (default is checked when omitted). The `default` property is only meaningful when `toggle` is present.
+  - `truevalue:"(+)"` and `falsevalue:"(-)"` (optional) customize how the toggle state is displayed in PDF when the group itself prints a summary line (see below). If omitted, defaults used are `(+)` when checked and `(-)` when unchecked.
+  - PDF behavior: If unchecked the group emits no child content. If a `falsevalue` is provided, a single summary line of the form `Group Title: <falsevalue>` MAY appear; otherwise the entire group is omitted. When checked, the title MAY append the `truevalue` token (defaults to `(+)`).
 
 Behavior:
 - Groups can nest arbitrarily.
-- Hidden groups hide all descendants.
+- Hidden (`if:` false or `pdf.hidden:true` / `ui.hidden:true`) groups hide all descendants in their respective channels.
 - Layout influences both UI rendering and PDF arrangement (see §12).
+- Toggle groups with missing `id` still function visually but the linter emits a WARNING because their state cannot be referenced or exported reliably.
 
 Diagnostics:
 - Unknown layout -> warning (treated as `vstack`).
 - Empty group -> warning.
+- Toggle group without `id` -> warning (`Toggle group should have an 'id' ...`).
 
 ## 11. Static Paragraphs
 
@@ -277,6 +284,7 @@ Limitations:
 
 - `formula:<jsExpr>` - a JavaScript expression evaluated with a proxy mapping field IDs to their values.
 - `format:decimal(n)` MAY be specified to round numeric results to `n` decimal places.
+- `unit:<string>` OPTIONAL: When present, the unit string is appended for display in both UI labels (parenthetical) and in PDF output after the computed value (e.g., `BMI: 24.1 kg/m^2`). The parser treats `unit:` as a simple string; no automatic conversions are performed.
 
 Security note: See §17 regarding evaluation.
 
@@ -330,7 +338,7 @@ PDF inclusion guidelines:
 - `chronicdiseases`: each entry printed in list form as `K/C/O <Disease> × <duration> <unit> - <treatment>` (treatment part omitted if empty). If `shownegatives:true`, known chronic diseases absent from the list may produce an additional negative summary (e.g., `N/K/C/O ...`).
 - `pastevents`: each entry printed prefixed with `H/O` (e.g., `H/O Surgery - Appendicectomy 2015`).
 - `checkbox`: printed as `label: (+)` or `(-)` unless `trueValue`/`falseValue` provided.
-- `computed`: printed as `label: value`.
+- `number`/`computed`: printed as `label: value <unit>` when non-empty; when `unit` is provided it is appended after the value (e.g., `Pulse: 96 bpm`).
 - `hidden`: skipped.
 - `group` (vstack): children appear sequentially.
 - `group` (hstack): children arranged as parallel columns (each child becomes a column stack).
@@ -388,7 +396,7 @@ Computed `formula` values MAY be evaluated using JavaScript `Function` or simila
 ## 19. Appendix: Field Type & Structural Quick Reference (informative)
 
 - text: general-purpose single/multi-line input; supports `multiline`.
-- number: numeric input with optional `min`/`max`.
+- number: numeric input with optional `min`/`max`; supports `unit` suffix for display/print.
 - checkbox: boolean state; `trueValue`/`falseValue` customize display.
 - date: date selection/input.
 - select: enumerated choice(s); `multiple` for multi-select.
@@ -399,7 +407,7 @@ Computed `formula` values MAY be evaluated using JavaScript `Function` or simila
 - chronicdiseases: Structured chronic disease list (disease, duration, unit, treatment) with optional negatives (`shownegatives:true`).
 - pastevents: Past events (event + details) list.
 - static: display-only text; body preserved as-is.
-- computed: expression-derived value; not user-editable.
+- computed: expression-derived value; supports `unit` suffix for display/print; not user-editable.
 - hidden: non-UI value; always omitted from PDF.
-- group: structural container with layout control (vstack, hstack, columns-N).
+- group: structural container with layout control (vstack, hstack, columns-N); supports `toggle` with optional `default:false`, `truevalue`, `falsevalue`.
 - include: (meta directive) import part from external template (removed post-parse).

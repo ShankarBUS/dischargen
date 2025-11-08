@@ -570,49 +570,56 @@ footer {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-}
 
-.group>h2 {
-    margin: 0;
-    font-size: var(--fs-4);
-    font-weight: 600;
-    letter-spacing: 0.25px;
-}
+    .group-header {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        cursor: default;
+    }
+    
+    h2 {
+        margin: 0;
+        font-size: var(--fs-4);
+        font-weight: 600;
+        letter-spacing: 0.25px;
+    }
 
-.group .group-body {
-    display: grid;
-    gap: var(--space-3);
-}
+    .group-body {
+        display: grid;
+        gap: var(--space-3);
+    }
 
-.group .group-body.layout-vstack {
-    grid-template-columns: repeat(1, minmax(120px, 1fr));
-}
+    .group-body.layout-vstack {
+        grid-template-columns: repeat(1, minmax(120px, 1fr));
+    }
 
-.group .group-body.layout-hstack {
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
-    align-items: center;
-}
+    .group-body.layout-hstack {
+        display: flex;
+        flex-wrap: wrap;
+        flex-direction: row;
+        align-items: center;
+    }
 
-.group .group-body.layout-columns {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-}
+    .group-body.layout-columns {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    }
 
-.group .group-body.layout-columns.cols-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+    .group-body.layout-columns.cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
-.group .group-body.layout-columns.cols-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
+    .group-body.layout-columns.cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 
-.group .group-body.layout-columns.cols-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-}
+    .group-body.layout-columns.cols-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 
-.group .group-body.layout-columns.cols-5 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    .group-body.layout-columns.cols-5 {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
 }
 
 /* Form Layout */
@@ -686,6 +693,7 @@ textarea {
 
 select {
     display: flex;
+    background: var(--c-surface-alt);
     appearance: base-select;
     justify-content: space-between;
     align-items: center;

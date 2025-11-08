@@ -269,15 +269,12 @@ function parseProps(chunk) {
           const arr = new Array(parts.length);
           for (let j = 0; j < parts.length; j++) {
             const raw = stripQuotes(parts[j].trim());
-            arr[j] = decodeURIComponent(raw);
+            arr[j] = raw;
           }
           val = arr;
         } else {
           val = [];
         }
-      } else if (val !== true) {
-        // Decode URI components only for non-boolean, non-array scalars
-        val = decodeURIComponent(val);
       }
     }
 
