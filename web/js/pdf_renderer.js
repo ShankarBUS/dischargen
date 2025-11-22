@@ -318,11 +318,12 @@ async function renderGroupNode(node, ctx, options = {}) {
     const groupHidesLabels = !!(node.pdf && (node.pdf.hidelabels === true || String(node.pdf.hidelabels).toLowerCase() === "true"));
     const hideLabelsForChildren = inheritedHideLabels || groupHidesLabels;
     const isToggle = node.toggle === true || String(node.toggle).toLowerCase() === "true";
+    const hasFormat = typeof node.format === "string" && node.format.trim().length;
     if (isToggle) {
         const val = ctx.getValue(node.id);
         const checked = !!val;
         if (!checked) {
-            // If unchecked and a falsevalue is provided, render a single line "Title: falsevalue"; else render nothing
+            // Unchecked toggle: if group.format exists we still respect falsevalue fallback
             const fv = node.falsevalue ?? "(-)";
             if (fv) {
                 const line = `${node.title ? node.title + ": " : ""}${fv}`.trim();
@@ -335,18 +336,27 @@ async function renderGroupNode(node, ctx, options = {}) {
     const layout = String(node.layout || "vstack").toLowerCase();
     const children = node.children || [];
     const childBlocks = [];
-    for (const ch of children) {
-        if (!ch) continue;
-        if (ch.type === "group") {
-            const nested = await renderGroupNode(ch, ctx, { hideLabels: hideLabelsForChildren });
-            if (nested.length) childBlocks.push(nested);
-            continue;
-        }
-        if (ch.type === "field") {
-            const frags = renderFieldNode(ch, ctx, { hideLabels: hideLabelsForChildren });
-            if (frags.length) childBlocks.push(frags);
+
+    // If group has a format string, we will produce a single formatted line instead of child blocks
+    let formattedLine = null;
+    if (hasFormat) {
+        formattedLine = buildFormattedGroupLine(node, ctx, { hideLabels: hideLabelsForChildren });
+        // Do not gather childBlocks for PDF when format present; still recurse groups for side-effects if any (e.g., visibility dependent on toggle) but skip output.
+    } else {
+        for (const ch of children) {
+            if (!ch) continue;
+            if (ch.type === "group") {
+                const nested = await renderGroupNode(ch, ctx, { hideLabels: hideLabelsForChildren });
+                if (nested.length) childBlocks.push(nested);
+                continue;
+            }
+            if (ch.type === "field") {
+                const frags = renderFieldNode(ch, ctx, { hideLabels: hideLabelsForChildren });
+                if (frags.length) childBlocks.push(frags);
+            }
         }
     }
+
     const out = [];
     const title = node.title ? node.title.trim() +
         (node.toggle ? ": " + (node.truevalue ? node.truevalue : "(+)") : "") : ""; // Append truevalue to title if toggle
@@ -372,13 +382,35 @@ async function renderGroupNode(node, ctx, options = {}) {
             };
         return arr;
     };
-    if (layout === "hstack") {
-        const cols = childBlocks.map((cb) => ({
-            stack: normalizeFirst(cb.slice()),
-            width: "auto",
-        }));
+    if (hasFormat && formattedLine) {
+        // Single formatted line output
+        const lineText = formattedLine;
+        const textNode = { text: toRunsWithFonts(lineText), margin: [0, 0, 0, 4] };
         if (titleNode) out.push(titleNode);
-        out.push({ columns: cols, columnGap: 10, margin: [0, 0, 0, 6] });
+        out.push(textNode);
+    } else if (layout === "hstack") {
+        // hstack flattening (groups only):
+        // If EVERY direct child yields exactly ONE simple text fragment (no tables/lists/columns/stack),
+        // we join those child texts using group-level pdf.delimiter (default ' ') while preserving formatting runs.
+        // Otherwise we render columns.
+        const delimiter = ((node.pdf && node.pdf.delimiter) || ' ').toString();
+        const isSimpleFragment = (frag) => frag && frag.text && !frag.table && !frag.ul && !frag.ol && !frag.columns && !frag.stack;
+        const canFlatten = childBlocks.length > 0 && childBlocks.every((cb) => cb.every(isSimpleFragment));
+        if (canFlatten) {
+            const combinedRuns = [];
+            childBlocks.forEach((cb, idx) => {
+                cb.forEach(frag => { combinedRuns.push(frag); });
+                if (idx < childBlocks.length - 1) combinedRuns.push(...toRunsWithFonts(delimiter));
+            });
+            if (combinedRuns.length) {
+                if (titleNode) out.push(titleNode);
+                out.push({ text: combinedRuns, margin: [0, 0, 0, 6] });
+            }
+        } else {
+            const cols = childBlocks.map((cb) => ({ stack: normalizeFirst(cb.slice()), width: 'auto' }));
+            if (titleNode) out.push(titleNode);
+            out.push({ columns: cols, columnGap: 10, margin: [0, 0, 0, 6] });
+        }
     } else if (layout === "vstack") {
         if (titleNode) out.push(titleNode);
         childBlocks.forEach((cb) => cb.forEach((n) => out.push(n)));
@@ -397,6 +429,30 @@ async function renderGroupNode(node, ctx, options = {}) {
         childBlocks.forEach((cb) => cb.forEach((n) => out.push(n)));
     }
     return out;
+}
+
+// Build a formatted group line replacing {id} placeholders using field values.
+function buildFormattedGroupLine(groupNode, ctx, options = {}) {
+    const fmtRaw = String(groupNode.format || "").trim();
+    if (!fmtRaw) return null;
+    const placeholderRegex = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+    const astChildren = groupNode.children || [];
+    // Build a quick lookup id->node for child fields (non-recursive, only direct children)
+    const childMap = new Map();
+    astChildren.forEach((ch) => {
+        if (ch && ch.type === "field" && ch.id) childMap.set(ch.id, ch);
+    });
+    let result = fmtRaw.replace(placeholderRegex, (_, id) => {
+        const node = childMap.get(id);
+        const rawVal = ctx.getValue(id);
+        if (rawVal === undefined || rawVal === null || rawVal === "") return "";
+        if (!node) return String(rawVal); // fallback if not direct child
+        const text = buildFieldLine(node, rawVal, { hideLabels: true });
+        return text ? text : "";
+    });
+    // Collapse multiple spaces and cleanup dangling punctuation (", ," etc.)
+    result = result.replace(/\s{2,}/g, " ").replace(/\s*,\s*,+/g, ", ").replace(/(^[\s,]+|[\s,]+$)/g, "").trim();
+    return result;
 }
 
 async function renderSectionNode(section, ctx) {
@@ -533,7 +589,7 @@ function buildFieldLine(node, val, options = {}) {
             if (val !== undefined && val !== null && val !== 0 && val !== "0")
                 text = str(val);
             if (node.unit)
-                text += ` ${node.unit}`;
+                text += node.unit;
             break;
         }
         case "date": {

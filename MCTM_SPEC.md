@@ -234,18 +234,60 @@ Properties:
   - `vstack` (default) vertical stacking
   - `hstack` horizontal columns (one per child)
   - `columns-N` grid with N columns (e.g., `columns-2`, `columns-3`, ...)
+- `pdf.delimiter:"; "` (groups only): When the group's `layout:hstack` and all direct children each render to a single simple text line, the PDF renderer MAY flatten them into one line joined by this delimiter. Defaults to `; ` when omitted. Ignored for non-`hstack` layouts and for fields.
 - `if:` conditional visibility (same semantics as for fields/sections)
 - `toggle` (flag): when present (boolean true), the group becomes user-toggleable via a checkbox rendered in the UI alongside its title. Toggling enables/disables (hides grays out) all descendant fields in the interactive UI and controls PDF/export inclusion.
   - When `toggle` is set and the group has an `id`, a synthetic boolean field reference is exposed under that `id` so `if:` conditions and computed formulas MAY reference the toggle state (checked -> true, unchecked -> false).
   - `default:false` MAY be supplied to start the toggle unchecked (default is checked when omitted). The `default` property is only meaningful when `toggle` is present.
   - `truevalue:"(+)"` and `falsevalue:"(-)"` (optional) customize how the toggle state is displayed in PDF when the group itself prints a summary line (see below). If omitted, defaults used are `(+)` when checked and `(-)` when unchecked.
   - PDF behavior: If unchecked the group emits no child content. If a `falsevalue` is provided, a single summary line of the form `Group Title: <falsevalue>` MAY appear; otherwise the entire group is omitted. When checked, the title MAY append the `truevalue` token (defaults to `(+)`).
+- `format:"<template>"` (groups only): When supplied the group is rendered in PDF as ONE formatted line constructed from the template instead of rendering child blocks. The template may contain placeholders of the form `{childId}` referring to direct child field IDs. Each placeholder is replaced with the child's value rendered WITHOUT its label (units still appended for `number`/`computed`). Placeholders pointing to:
+  - A direct child field with an empty / null / missing value -> replaced with an empty string.
+  - A direct child field with a value -> replaced with that field's printable value (labels suppressed).
+  - An ID that exists in the values map but is not a direct child -> replaced with its raw string value.
+  - An unknown ID -> replaced with an empty string.
+  After substitution consecutive spaces are collapsed and leading/trailing commas or stray punctuation are trimmed. Children are still traversed for side-effects (e.g., evaluating `if:` visibility, nested toggle state) but their own PDF output is suppressed.
+  Interaction with toggles: If the group is a toggle and is unchecked the normal `falsevalue` fallback applies (the `format` string is NOT used). If checked, the formatted line is used and the group's `truevalue` (if any) is appended to the title as usual.
+  Interaction with layout: When `format` is present `layout` and `pdf.delimiter` flattening logic are ignored for PDF output (single line wins). In the UI the presence of `format` does not change how children appear (they still render normally). Tools MAY optionally offer a preview of the formatted line.
+  Validation notes: There is currently no linter warning for unknown `{placeholder}` IDs; they simply resolve to empty strings.
+
 
 Behavior:
 - Groups can nest arbitrarily.
 - Hidden (`if:` false or `pdf.hidden:true` / `ui.hidden:true`) groups hide all descendants in their respective channels.
 - Layout influences both UI rendering and PDF arrangement (see §12).
 - Toggle groups with missing `id` still function visually but the linter emits a WARNING because their state cannot be referenced or exported reliably.
+
+### 10.1 Formatted Group Line Examples
+
+Simple vitals line:
+```
+{ "Vitals" format:"BP {bp}, Pulse {pulse} bpm, RR {rr}" layout:hstack
+  @text id:bp label:"Blood Pressure" @
+  @number id:pulse label:"Pulse" unit:" bpm" @
+  @number id:rr label:"Resp Rate" unit:"/min" @
+}
+```
+PDF Output (example):
+```
+Vitals: BP 120/80, Pulse 82 bpm, RR 16/min
+```
+
+Toggle + format:
+```
+{ "Systemic Examination" id:sysex toggle truevalue:"(+)" falsevalue:"(-)" format:"CVS {cvs}, RS {rs}, CNS {cns}"
+  @text id:cvs label:"CVS" @
+  @text id:rs label:"RS" @
+  @text id:cns label:"CNS" @
+}
+```
+If unchecked: `Systemic Examination: (-)` (children suppressed). If checked and all three have values: `Systemic Examination: (+)` as title followed by formatted line:
+```
+Systemic Examination: (+)
+CVS S1 S2 normal, RS Clear, CNS Conscious & oriented
+```
+
+Placeholder referencing non-direct child (e.g., `{bp}` inside a parent group but `bp` is actually inside a nested group) falls back to the raw value if present in the values map, otherwise empty.
 
 Diagnostics:
 - Unknown layout -> warning (treated as `vstack`).
@@ -341,7 +383,7 @@ PDF inclusion guidelines:
 - `number`/`computed`: printed as `label: value <unit>` when non-empty; when `unit` is provided it is appended after the value (e.g., `Pulse: 96 bpm`).
 - `hidden`: skipped.
 - `group` (vstack): children appear sequentially.
-- `group` (hstack): children arranged as parallel columns (each child becomes a column stack).
+- `group` (hstack): children arranged as parallel columns (each child becomes a column stack). If and only if every direct child renders to exactly one simple text fragment (no tables/lists/columns/stack), the group MAY be flattened into a single line by joining those child texts using `pdf.delimiter` (a property on the group). Default delimiter when omitted is `; `. Only `pdf.delimiter` on the parent group is recognized (child field/group `delimiter` properties are ignored for flattening).
 - `group` (columns-N): children distributed across N columns in row-major order.
 - Others: printed as `label: value` when non-empty.
 
@@ -409,5 +451,5 @@ Computed `formula` values MAY be evaluated using JavaScript `Function` or simila
 - static: display-only text; body preserved as-is.
 - computed: expression-derived value; supports `unit` suffix for display/print; not user-editable.
 - hidden: non-UI value; always omitted from PDF.
-- group: structural container with layout control (vstack, hstack, columns-N); supports `toggle` with optional `default:false`, `truevalue`, `falsevalue`.
+- group: structural container with layout control (vstack, hstack, columns-N); supports `toggle` with optional `default:false`, `truevalue`, `falsevalue`; supports optional `pdf.delimiter` (used only by an `hstack` parent group to flatten its direct children when all are single simple text fragments).
 - include: (meta directive) import part from external template (removed post-parse).

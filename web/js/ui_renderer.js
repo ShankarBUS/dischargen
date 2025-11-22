@@ -322,30 +322,6 @@ function renderGroup(node, state, renderNodes) {
     if (node.if) wrapper.dataset.condition = node.if;
     if (node.pdf && node.pdf.hidden) wrapper.dataset.pdfHidden = "true";
     if (node.ui && node.ui.hidden) wrapper.dataset.uiHidden = "true";
-    const isToggle = node.toggle === true || String(node.toggle).toLowerCase() === "true";
-    let headerRow = null;
-    let toggleCb = null;
-    if (node.title || isToggle) {
-        headerRow = document.createElement("div");
-        headerRow.className = "group-header";
-        if (isToggle) {
-            toggleCb = document.createElement("input");
-            toggleCb.type = "checkbox";
-            // default: checked unless default === false
-            toggleCb.checked = node.default === false ? false : true;
-            headerRow.appendChild(toggleCb);
-            if (node.id) {
-                // Expose group toggle as a field ref so conditions can depend on it
-                state.fieldRefs[node.id] = toggleCb;
-            }
-        }
-        if (node.title) {
-            const h = document.createElement("h2");
-            h.textContent = node.title;
-            headerRow.appendChild(h);
-        }
-        wrapper.appendChild(headerRow);
-    }
 
     const layout = String(node.layout || "vstack");
     const body = document.createElement("div");
@@ -357,13 +333,6 @@ function renderGroup(node, state, renderNodes) {
         if (m) body.classList.add("layout-columns", `cols-${m[1]}`);
         else body.classList.add("layout-vstack");
     }
-
-    const syncBodyVisibility = () => {
-        if (!isToggle) return;
-        const on = !!(toggleCb && toggleCb.checked);
-        wrapper.classList.toggle("disabled", !on);
-        body.style.display = on ? "" : "none";
-    };
 
     (node.children || []).forEach((ch) => {
         if (!ch || ch.type === "include") return;
@@ -382,14 +351,54 @@ function renderGroup(node, state, renderNodes) {
             if (el) body.appendChild(el);
         }
     });
-    wrapper.appendChild(body);
-    if (toggleCb) {
-        toggleCb.addEventListener("change", () => {
+
+    const isToggle = node.toggle === true || String(node.toggle).toLowerCase() === "true";
+    let headerRow = null;
+    let toggleCb = null;
+    if (node.title || isToggle) {
+        headerRow = document.createElement("div");
+        headerRow.className = "group-header";
+        if (isToggle) {
+            toggleCb = document.createElement("input");
+            toggleCb.type = "checkbox";
+            toggleCb.id = node.id;
+            // default: checked unless default === false
+            toggleCb.checked = node.default === false ? false : true;
+            headerRow.appendChild(toggleCb);
+            // Use a label for the title to allow toggling by clicking text
+            if (node.title) {
+                const label = document.createElement("label");
+                label.htmlFor = node.id;
+                label.textContent = node.title;
+                headerRow.appendChild(label);
+            }
+            const syncBodyVisibility = () => {
+                if (!isToggle) return;
+                const on = !!(toggleCb && toggleCb.checked);
+                wrapper.classList.toggle("disabled", !on);
+                wrapper.classList.toggle("toggled", on);
+                body.style.display = on ? "" : "none";
+            };
+
+            toggleCb.addEventListener("change", () => {
+                syncBodyVisibility();
+            });
+            if (node.id) {
+                // Expose group toggle as a field ref so conditions can depend on it
+                state.fieldRefs[node.id] = toggleCb;
+            }
             syncBodyVisibility();
-        });
-        // initialize
-        syncBodyVisibility();
+        }
+        
+        if (node.title && !isToggle) {
+            const h = document.createElement("h2");
+            h.textContent = node.title;
+            headerRow.appendChild(h);
+        }
+        wrapper.appendChild(headerRow);
     }
+
+    wrapper.appendChild(body);
     return wrapper;
 }
 
@@ -403,7 +412,7 @@ function renderField(node, state) {
         const label = document.createElement("label");
         label.textContent = node.label;
         if ((node.fieldType === "number" || node.fieldType === "computed") && node.unit)
-            label.textContent += ` (${node.unit})`;
+            label.textContent += ` (${node.unit.trim()})`;
         label.htmlFor = node.id;
         if (node.required) label.classList.add("required");
         wrapper.appendChild(label);

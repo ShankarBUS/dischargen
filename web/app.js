@@ -422,8 +422,13 @@ function restoreAutosave() {
             const ref = state.fieldRefs[id];
             if (!ref) return;
             if (ref instanceof HTMLElement) {
-                if (ref.type === "checkbox") ref.checked = !!val;
-                else ref.value = val;
+                if (ref.type === "checkbox") {
+                    // Ensure any visibility sync tied to checkbox change is applied
+                    ref.checked = !!val;
+                    ref.dispatchEvent(new Event("change"));
+                } else {
+                    ref.value = val;
+                }
             } else if (ref && "value" in ref) {
                 try {
                     ref.value = val;
