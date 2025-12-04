@@ -570,12 +570,12 @@ footer {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    
+
     .toggled {
         gap: 0;
         border: 1px solid var(--c-border);
         border-radius: var(--radius-md);
-        
+
         .group-header {
             background: var(--c-surface-alt);
             border-radius: var(--radius-md) var(--radius-md) 0 0;
@@ -594,14 +594,15 @@ footer {
         gap: var(--space-3);
         cursor: default;
 
-        label, h2 {
+        label,
+        h2 {
             margin: 0;
             font-size: var(--fs-4);
             font-weight: 600;
             cursor: pointer;
         }
     }
-    
+
     .group-body {
         display: grid;
         gap: var(--space-3);
@@ -1757,4 +1758,72 @@ html.nav-open .nav-backdrop {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* SegmentedNumber */
+.segmented-number {
+    display: flex;
+    gap: 0px;
+    align-items: stretch;
+}
+
+.segmented-number .seg-wrap {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.segmented-number input[type="number"] {
+    min-width: 50px;
+    width: 70px;
+    border: none;
+    border-right: 1px solid var(--c-border);
+    border-radius: 0;
+    background: var(--c-surface);
+}
+
+.segmented-number input[type="number"]:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.segmented-number .seg-wrap:has(input:focus) {
+    outline: none;
+    border-color: var(--c-accent);
+    box-shadow: var(--focus-ring);
+}
+
+.segmented-number input[type="number"]:last-of-type {
+    border-right: none;
+}
+
+.segmented-number .seg-sep {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    font-weight: 600;
+    color: var(--c-text-soft);
+    background: var(--c-surface-alt);
+    border-right: 1px solid var(--c-border);
+    user-select: none;
+}
+
+.segmented-number .seg-unit {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    font-size: var(--fs-3);
+    font-weight: 600;
+    background: var(--c-surface-alt);
+    color: var(--c-text-soft);
+    border-left: 1px solid var(--c-border);
+    user-select: none;
+}
+
+.segmented-number[aria-invalid="true"] .seg-wrap {
+    border-color: var(--c-danger);
+    background: rgba(220 38 38 / 0.07);
 }

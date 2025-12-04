@@ -7,17 +7,18 @@ import {
     searchDrugRoutes,
     loadCatalog,
 } from "./search_handler.js";
+
 import { AutoCompleteBox } from "./components/autocompletebox.js";
 import { DataEditor } from "./components/dataeditor.js";
-import "./components/quantityunit.js";
+import { FrequencyEditor } from "./components/frequencyeditor.js";
+import { QuantityUnitInput } from "./components/quantityunit.js";
+import { SegmentedNumber } from "./components/segmentednumber.js";
+
 import { evaluateCondition } from "./conditional.js";
 import { applyValidation } from "./validation.js";
 import { parseMarkdown, escapeHtml } from "./md_parser.js";
 import { getKnownChronicDiseases, getKnownPastEvents } from "./defaults.js";
-import { QuantityUnitInput } from "./components/quantityunit.js";
 import { toNumberSafe, durationToDays } from "./utils/prescription.js";
-import "./components/frequencyeditor.js";
-import { FrequencyEditor } from "./components/frequencyeditor.js";
 
 /**
  * Render the full UI given parsed AST + meta.
@@ -90,6 +91,7 @@ const FIELD_RENDERERS = {
     chronicdiseases: renderChronicDiseasesField,
     pastevents: renderPastEventsField,
     medications: renderMedicationsField,
+    segmented: renderSegmentedNumberField,
 };
 
 function renderNodes(nodes, parent, state, renderUI = true) {
@@ -411,7 +413,7 @@ function renderField(node, state) {
     if (node.label) {
         const label = document.createElement("label");
         label.textContent = node.label;
-        if ((node.fieldType === "number" || node.fieldType === "computed") && node.unit)
+        if ((node.fieldType === "number" || node.fieldType === "computed" || node.fieldType === "segmented") && node.unit)
             label.textContent += ` (${node.unit.trim()})`;
         label.htmlFor = node.id;
         if (node.required) label.classList.add("required");
@@ -484,6 +486,49 @@ function renderField(node, state) {
     //     return null;
     // }
     return wrapper;
+}
+
+function renderSegmentedNumberField(node, wrapper, state) {
+    // Config object example on node:
+    // { fieldType: 'segmented', id: 'bp', label: 'Blood Pressure', segments: ['systolic','diastolic'], separator:'/', format:'{systolic}/{diastolic}', required:true }
+    const seg = new SegmentedNumber();
+    if (Array.isArray(node.segments) && node.segments.length >= 2) {
+        seg.setAttribute("segments", node.segments.join(","));
+    }
+    if (node.separator) seg.setAttribute("separator", node.separator);
+    if (node.format) seg.setAttribute("format", node.format);
+    if (node.placeholder) seg.setAttribute("placeholder", node.placeholder);
+    if (node.required) seg.setAttribute("required", "true");
+    seg.id = node.id;
+
+    // default values support: node.default can be a formatted string OR array of segment values
+    if (node.default !== undefined) {
+        if (Array.isArray(node.default)) {
+            seg.setAttribute("values", node.default.map(v => v == null ? "" : v).join(","));
+        } else if (typeof node.default === "string") {
+            seg.value = node.default;
+        }
+    }
+
+    wrapper.appendChild(seg);
+    state.fieldRefs[node.id] = {
+        get value() {
+            return seg.value;
+        },
+        set value(v) {
+            if (Array.isArray(v)) {
+                seg.setAttribute("values", v.map(x => x == null ? "" : x).join(","));
+            } else if (typeof v === "string") {
+                seg.value = v;
+            } else if (v && typeof v === "object") {
+                // object keyed by segment names
+                const arr = seg.segmentKeys.map(k => v[k] ?? "");
+                seg.setAttribute("values", arr.join(","));
+            } else {
+                seg.clear();
+            }
+        }
+    };
 }
 
 function renderDiagnosisField(node, wrapper, state) {

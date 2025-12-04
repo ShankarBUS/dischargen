@@ -123,6 +123,7 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 |------|----------|------------------------------------------------------------|-------|
 | text | id | label, placeholder, multiline, pattern, required, default, if, pdf.hidden, ui.hidden | Single/multi-line text input |
 | number | id | label, placeholder, min, max, pattern, required, default, unit, if, pdf.hidden, ui.hidden | Numeric input (supports unit suffix) |
+| segmented | id | label, segments, separator, format, values, placeholder, required, unit, if, pdf.hidden, ui.hidden | Multi-part numeric input composed of 2+ segments with format-based parsing and unit display |
 | checkbox | id | label, trueValue, falseValue, required, default, if, pdf.hidden, ui.hidden | Boolean input |
 | date | id | label, required, default, if, pdf.hidden, ui.hidden | Date string |
 | select | id | label, placeholder, options, source, multiple, required, default, if, pdf.hidden, ui.hidden | Inline `options:[A,B,C]` or external `source:<path>` |
@@ -138,6 +139,31 @@ The following types are recognized by this spec. Unknown types SHOULD be tolerat
 
 Notes:
 - Array based properties MAY be specified as `prop:[A,B,C]` (without spaces) or as a quoted array string `prop:"[A, B, C]"`. Both parse equivalently.
+
+#### Segmented Field Details
+
+The `segmented` field type renders a compact multi-input control that captures two or more numeric segments (e.g., systolic/diastolic for blood pressure).
+
+Properties:
+- `segments` (required): Ordered list of segment keys (at least two). Example: `[systolic, diastolic]`.
+- `separator` (optional): String used between segments when `format` is not specified. Default `/`.
+- `format` (optional): Template used to render and parse the value. Placeholders must match `segments` keys. Literal characters (e.g., `/`, `x`, `:`) are respected. Example: `{systolic}/{diastolic}`
+- `values` (optional): Initial raw segment values matching order of `segments`. Example: `[120, 80]`.
+- `placeholder` (optional): Placeholder text applied to each segment input.
+- `required` (flag): All segments must be non-empty for validity.
+- `unit` (optional): Unit displayed adjacent to the control and appended to labels in UI/PDF like other numeric fields.
+
+Behavior:
+- Output value: If `format` is provided, the component substitutes placeholders with segment values and removes any remaining unresolved placeholders. Otherwise, it joins segment values by `separator`.
+- Parsing on set-value: When a formatted string is programmatically assigned (e.g., `"120/80"`), the component builds a precise regex from the `format` (escaping literal text and replacing `{key}` placeholders with named numeric capture groups) and loads captures back into the corresponding segments. Optional whitespace around separators is tolerated. If the `format` match fails, it falls back to splitting by `separator`.
+- Events: Emits `change` with `{ value, segments, valid }` whenever any segment changes.
+- Validation: When `required` is set, validity requires all segment inputs to be non-empty.
+
+Example:
+```
+@segmented id:bp label:"Blood Pressure" segments:[systolic, diastolic] format:"{systolic}/{diastolic}" unit:"mmHg" default:[120, 80] @
+```
+UI shows two number inputs with a `/` between them and the unit displayed; programmatically setting the value to `"130/85"` loads `systolic=130`, `diastolic=85` using the format.
 
 ## 8. Include Directive (Parse-Time Expansion)
 

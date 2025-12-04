@@ -358,8 +358,9 @@ async function renderGroupNode(node, ctx, options = {}) {
     }
 
     const out = [];
-    const title = node.title ? node.title.trim() +
-        (node.toggle ? ": " + (node.truevalue ? node.truevalue : "(+)") : "") : ""; // Append truevalue to title if toggle
+    let title = node.title ? node.title.trim() : "";
+    if (node.format) title += ": ";
+    else if (node.toggle) title += ": " + (node.truevalue ? node.truevalue : "(+)"); // Append truevalue to title if toggle
     const titleNode = title
         ? {
             text: toRunsWithFonts(title),
@@ -367,6 +368,7 @@ async function renderGroupNode(node, ctx, options = {}) {
             margin: [0, 6, 0, 4],
         }
         : null;
+
     const normalizeFirst = (arr) => {
         if (!arr.length) return arr;
         const f = arr[0];
@@ -585,7 +587,8 @@ function buildFieldLine(node, val, options = {}) {
             break;
         }
         case "computed":
-        case "number": {
+        case "number":
+        case "segmented": {
             if (val !== undefined && val !== null && val !== 0 && val !== "0")
                 text = str(val);
             if (node.unit)
