@@ -1,0 +1,106 @@
+@mctm 1.0
+---
+template_id: debug
+version: 1.0
+title: "Debug: General Examination"
+---
+
+> "General Examination"
+
+{ "General Condition" id:gencond layout:hstack pdf.delimiter:"; " pdf.hidelabels:true
+
+@select id:gen_appearance label:"Appearance" options:"[Comfortable at rest, Mild distress, Moderate distress, Severe distress]" @
+@select id:gen_consciousness label:"Consciousness" options:"[Conscious, Drowsy, Stuporous, Unconscious]" @
+@select id:gen_orientation label:"Orientation" options:"[Oriented, Disoriented]" @
+@select id:gen_nourishment label:"Nourishment" options:"[Well-nourished, Under-nourished, Over-nourished]" @
+@select id:gen_hydration label:"Hydration" options:"[Hydrated, Dehydrated]" @
+
+}
+
+{ "Vitals" id:vitals layout:hstack pdf.delimiter:"; "
+
+@number id:vital_pulse label:"Pulse" unit:"/min" min:0 max:300 @
+@segmented id:vital_bp label:"BP" segments:"[systolic,diastolic]" format:"{systolic}/{diastolic}" unit:" mmHg" @
+@number id:vital_rr label:"RR" unit:"/min" min:0 max:80 @
+@number id:vital_temp label:"Temp" unit:"°F" min:90 max:110 @
+@number id:vital_spo2 label:"SpO2" unit:"%" min:50 max:100 @
+@number id:vital_rbs label:"RBS" unit:" mg/dL" min:0 max:1000 @
+
+}
+
+{ "Oxygen Support" id:oxygen_support toggle falsevalue:"No" default:false layout:hstack
+
+@select id:oxygen_device label:"Device" options:"[Nasal prongs, Face mask, Venturi mask, NRBM, HFNC, NIV, Invasive Ventilation]" @
+@number id:oxygen_flow label:"Flow (L/min)" min:0 max:60 @
+@number id:oxygen_fio2 label:"FiO2 (%)" min:21 max:100 @
+
+}
+
+{ "Anthropometry" id:anthro layout:hstack
+
+@number id:height_cm label:"Height" unit:" cm" min:30 max:250 @
+@number id:weight_kg label:"Weight" unit:" kg" min:1 max:300 @
+@computed id:bmi label:"BMI" unit:" kg/m²" formula:"weight_kg / Math.pow(height_cm/100, 2)" format:decimal(1) @
+@computed id:bsa label:"BSA" unit:" m²" formula:"Math.sqrt((height_cm * weight_kg)/3600)" format:decimal(2) @
+
+}
+
+{ "General Signs" id:gen_signs layout:hstack pdf.delimiter:"; "
+
+{ "Pallor" id:pallor toggle default:false pdf.hidelabels:true layout:hstack
+@select id:pallor_severity label:"Severity" options:"[Mild, Moderate, Severe]" @
+@text id:pallor_notes label:"Sites/Notes" placeholder:"Conjunctiva, tongue, nail beds..." @
+}
+
+{ "Icterus" id:icterus toggle default:false pdf.hidelabels:true layout:hstack
+@select id:icterus_severity label:"Severity" options:"[Mild, Moderate, Severe]" @
+@text id:icterus_notes label:"Notes" placeholder:"Scleral, deep jaundice..." @
+}
+
+{ "Cyanosis" id:cyanosis toggle default:false pdf.hidelabels:true layout:hstack
+@select id:cyanosis_type label:"Type" options:"[Central, Peripheral]" @
+@text id:cyanosis_notes label:"Notes" @
+}
+
+{ "Clubbing" id:clubbing toggle default:false pdf.hidelabels:true layout:hstack
+@select id:clubbing_grade label:"Grade" options:"[I, II, III, IV]" @
+@text id:clubbing_notes label:"Notes" @
+}
+
+{ "Lymphadenopathy" id:lymphadenopathy toggle default:false pdf.hidelabels:true layout:hstack
+@select id:ln_site label:"Site" options:"[Cervical, Axillary, Inguinal, Epitrochlear, Generalized]" @
+@select id:ln_side label:"Side" options:"[Right, Left, Bilateral]" @
+@text id:ln_size label:"Size" placeholder:"e.g., 2 x 1 cm" @
+@select id:ln_tenderness label:"Tenderness" options:"[Tender, Non-tender]" @
+@select id:ln_consistency label:"Consistency" options:"[Soft, Firm, Hard, Rubbery, Matted]" @
+@text id:ln_notes label:"Notes" @
+}
+
+{ "Edema" id:edema toggle default:false pdf.hidelabels:true layout:hstack
+@select id:edema_type label:"Type" options:"[Pitting, Non-pitting]" @
+@select id:edema_grade label:"Grade" options:"[1+, 2+, 3+, 4+]" @
+@select id:edema_distribution label:"Distribution" options:"[Pedal, Generalized (Anasarca), Sacral, Periorbital]" @
+@text id:edema_notes label:"Notes" @
+}
+
+}
+
+{ "Skin" id:skin layout:hstack
+
+@checkbox id:skin_rash_present label:"Rash/Lesions" trueValue:"Present" @
+@text id:skin_rash_desc label:"Description" placeholder:"Type, distribution" if:skin_rash_present==true @
+
+}
+
+{ "GCS" id:gcs layout:hstack
+
+@select id:gcs_e label:"E" options:"[4, 3, 2, 1]" @
+@select id:gcs_v label:"V" options:"[5, 4, 3, 2, 1]" @
+@select id:gcs_m label:"M" options:"[6, 5, 4, 3, 2, 1]" @
+@computed id:gcs_total label:"GCS Total" formula:"(Number(gcs_e)||0) + (Number(gcs_v)||0) + (Number(gcs_m)||0)" format:decimal(0) @
+
+}
+
+{ "GCS Summary" id:gcs_summary format:"GCS E {gcs_e} V {gcs_v} M {gcs_m} = {gcs_total}" }
+
+@text id:gen_other_notes label:"Other Findings" multiline placeholder:"Additional general examination notes" @

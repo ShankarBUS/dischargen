@@ -1,9 +1,27 @@
 [
   {
+    "id": "debug",
+    "department_id": "",
+    "name": "Debug Template",
+    "file": "debug.mctm",
+    "default": true
+  },
+  {
     "id": "base_template",
     "department_id": "",
     "name": "Base Template",
-    "file": "base.mctm",
-    "default": true
+    "file": "base.mctm"
+  },
+  {
+    "id": "med_default",
+    "department_id": "dept_general_medicine",
+    "name": "General Medicine Default Template",
+    "file": "base.mctm"
+  },
+  {
+    "id": "med_default_1",
+    "department_id": "dept_general_medicine",
+    "name": "General Medicine Default Template 1",
+    "file": "base.mctm"
   }
 ]
