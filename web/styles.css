@@ -1,10 +1,8 @@
 /* Core Design Tokens (modern grouping & consistent naming) */
 :root {
     /* Brand */
-    --brand-blue: oklch(61% 0.176 247);
-    /* #1e90ff approx */
-    --brand-ygreen: oklch(78% 0.18 120);
-    /* #9acd32 approx */
+    --brand-blue: #1e90ff;
+    --brand-ygreen: #9acd32;
     --brand-primary: #006400;
     --brand-gradient: linear-gradient(45deg,
             var(--brand-blue),
